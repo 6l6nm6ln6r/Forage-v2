@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (required)
+    //   - photoURL: string (optional)
+    //   - familyId: string (optional)
+    //   - role: string (optional, enum: ["student", "guardian"])
+    //
+    // Collection: families
+    // Fields:
+    //   - name: string (required)
+    //   - createdBy: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: scholarships
+    // Fields:
+    //   - title: string (required)
+    //   - provider: string (optional)
+    //   - amount: number (optional)
+    //   - deadline: timestamp (optional)
+    //   - status: string (required, enum: ["potential", "applied", "awarded", "declined"])
+    //   - url: string (optional)
+    //   - notes: string (optional)
+    //   - familyId: string (required)
+    //   - addedBy: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isInFamily(familyId) {
+      return isAuthenticated() && getUserData().familyId == familyId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.displayName is string &&
+             (!('familyId' in data) || data.familyId is string) &&
+             (!('role' in data) || data.role in ['student', 'guardian']);
+    }
+
+    function isValidFamily(data) {
+      return data.keys().hasAll(['name', 'createdBy', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.createdBy == request.auth.uid &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidScholarship(data) {
+      return data.keys().hasAll(['title', 'familyId', 'addedBy', 'createdAt', 'status']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.familyId is string &&
+             data.addedBy == request.auth.uid &&
+             data.createdAt is timestamp &&
+             data.status in ['potential', 'applied', 'awarded', 'declined'] &&
+             (!('amount' in data) || data.amount is number) &&
+             (!('url' in data) || data.url is string) &&
+             (!('notes' in data) || data.notes is string);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated(); // Needed to find family members
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /families/{familyId} {
+      allow read: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isInFamily(familyId));
+      allow create: if isAuthenticated() && isValidFamily(request.resource.data);
+      allow update: if isInFamily(familyId) && isValidFamily(request.resource.data);
+    }
+
+    match /scholarships/{scholarshipId} {
+      allow read: if isAuthenticated() && isInFamily(resource.data.familyId);
+      allow create: if isAuthenticated() && isInFamily(request.resource.data.familyId) && isValidScholarship(request.resource.data);
+      allow update: if isAuthenticated() && isInFamily(resource.data.familyId) && isValidScholarship(request.resource.data);
+      allow delete: if isAuthenticated() && isInFamily(resource.data.familyId);
+    }
+  }
+}

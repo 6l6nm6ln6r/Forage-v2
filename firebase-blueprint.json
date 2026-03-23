@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "User email" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User photo URL" },
+        "familyId": { "type": "string", "description": "ID of the family they belong to" },
+        "role": { "type": "string", "enum": ["student", "guardian"], "description": "User role in the family" }
+      },
+      "required": ["uid", "email", "displayName"]
+    },
+    "Family": {
+      "title": "Family",
+      "description": "Family group for sharing scholarships",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Family name" },
+        "createdBy": { "type": "string", "description": "UID of the user who created the family" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["name", "createdBy", "createdAt"]
+    },
+    "Scholarship": {
+      "title": "Scholarship",
+      "description": "Scholarship record",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Scholarship title" },
+        "provider": { "type": "string", "description": "Scholarship provider" },
+        "amount": { "type": "number", "description": "Scholarship amount" },
+        "deadline": { "type": "string", "format": "date-time", "description": "Application deadline" },
+        "status": { "type": "string", "enum": ["potential", "applied", "awarded", "declined"], "description": "Current status" },
+        "url": { "type": "string", "description": "Link to scholarship details" },
+        "notes": { "type": "string", "description": "Additional notes" },
+        "familyId": { "type": "string", "description": "ID of the family this scholarship belongs to" },
+        "addedBy": { "type": "string", "description": "UID of the user who added it" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["title", "familyId", "addedBy", "createdAt", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/families/{familyId}": {
+      "schema": "Family",
+      "description": "Family groups"
+    },
+    "/scholarships/{scholarshipId}": {
+      "schema": "Scholarship",
+      "description": "Scholarship records"
+    }
+  }
+}
