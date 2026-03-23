@@ -27,9 +27,10 @@ service cloud.firestore {
     //   - provider: string (optional)
     //   - amount: number (optional)
     //   - deadline: timestamp (optional)
-    //   - status: string (required, enum: ["potential", "applied", "awarded", "declined"])
+    //   - status: string (required, enum: ["intake", "not_applicable", "need_to_apply", "in_progress", "applied"])
     //   - url: string (optional)
     //   - notes: string (optional)
+    //   - applicableStudents: list (optional)
     //   - familyId: string (required)
     //   - addedBy: string (required)
     //   - createdAt: timestamp (required)
@@ -76,12 +77,16 @@ service cloud.firestore {
       return data.keys().hasAll(['title', 'familyId', 'addedBy', 'createdAt', 'status']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              data.familyId is string &&
-             data.addedBy == request.auth.uid &&
+             data.addedBy is string &&
              data.createdAt is timestamp &&
-             data.status in ['potential', 'applied', 'awarded', 'declined'] &&
-             (!('amount' in data) || data.amount is number) &&
-             (!('url' in data) || data.url is string) &&
-             (!('notes' in data) || data.notes is string);
+             data.status in ['intake', 'not_applicable', 'need_to_apply', 'in_progress', 'applied'] &&
+             (!('amount' in data) || data.amount == null || data.amount is number) &&
+             (!('url' in data) || data.url == null || data.url is string) &&
+             (!('notes' in data) || data.notes == null || data.notes is string) &&
+             (!('provider' in data) || data.provider == null || data.provider is string) &&
+             (!('deadline' in data) || data.deadline == null || data.deadline is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+             (!('applicableStudents' in data) || data.applicableStudents is list);
     }
 
     // ===============================================================
@@ -92,6 +97,7 @@ service cloud.firestore {
       allow read: if isAuthenticated(); // Needed to find family members
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isOwner(userId) || userId.matches("^demo_.*");
     }
 
     match /families/{familyId} {
@@ -102,8 +108,13 @@ service cloud.firestore {
 
     match /scholarships/{scholarshipId} {
       allow read: if isAuthenticated() && isInFamily(resource.data.familyId);
-      allow create: if isAuthenticated() && isInFamily(request.resource.data.familyId) && isValidScholarship(request.resource.data);
-      allow update: if isAuthenticated() && isInFamily(resource.data.familyId) && isValidScholarship(request.resource.data);
+      allow create: if isAuthenticated() && isInFamily(request.resource.data.familyId) && 
+                      request.resource.data.addedBy == request.auth.uid &&
+                      isValidScholarship(request.resource.data);
+      allow update: if isAuthenticated() && isInFamily(resource.data.familyId) && 
+                      isValidScholarship(request.resource.data) &&
+                      request.resource.data.addedBy == resource.data.addedBy &&
+                      request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if isAuthenticated() && isInFamily(resource.data.familyId);
     }
   }

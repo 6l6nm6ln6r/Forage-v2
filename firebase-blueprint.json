@@ -34,9 +34,10 @@
         "provider": { "type": "string", "description": "Scholarship provider" },
         "amount": { "type": "number", "description": "Scholarship amount" },
         "deadline": { "type": "string", "format": "date-time", "description": "Application deadline" },
-        "status": { "type": "string", "enum": ["potential", "applied", "awarded", "declined"], "description": "Current status" },
+        "status": { "type": "string", "enum": ["intake", "not_applicable", "need_to_apply", "in_progress", "applied"], "description": "Current status" },
         "url": { "type": "string", "description": "Link to scholarship details" },
         "notes": { "type": "string", "description": "Additional notes" },
+        "applicableStudents": { "type": "array", "items": { "type": "string" }, "description": "List of student UIDs this scholarship is for" },
         "familyId": { "type": "string", "description": "ID of the family this scholarship belongs to" },
         "addedBy": { "type": "string", "description": "UID of the user who added it" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
