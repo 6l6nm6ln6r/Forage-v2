@@ -31,7 +31,6 @@
       "type": "object",
       "properties": {
         "title": { "type": "string", "description": "Scholarship title" },
-        "provider": { "type": "string", "description": "Scholarship provider" },
         "amount": { "type": "number", "description": "Scholarship amount" },
         "deadline": { "type": "string", "format": "date-time", "description": "Application deadline" },
         "status": { "type": "string", "enum": ["intake", "not_applicable", "need_to_apply", "in_progress", "applied"], "description": "Current status" },

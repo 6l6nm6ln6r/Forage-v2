@@ -24,7 +24,6 @@ service cloud.firestore {
     // Collection: scholarships
     // Fields:
     //   - title: string (required)
-    //   - provider: string (optional)
     //   - amount: number (optional)
     //   - deadline: timestamp (optional)
     //   - status: string (required, enum: ["intake", "not_applicable", "need_to_apply", "in_progress", "applied"])
@@ -83,9 +82,9 @@ service cloud.firestore {
              (!('amount' in data) || data.amount == null || data.amount is number) &&
              (!('url' in data) || data.url == null || data.url is string) &&
              (!('notes' in data) || data.notes == null || data.notes is string) &&
-             (!('provider' in data) || data.provider == null || data.provider is string) &&
              (!('deadline' in data) || data.deadline == null || data.deadline is timestamp) &&
              (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+             (!('academicYear' in data) || data.academicYear == null || data.academicYear is string) &&
              (!('applicableStudents' in data) || data.applicableStudents is list);
     }
 
@@ -94,10 +93,10 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated(); // Needed to find family members
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow read: if isAuthenticated() && (isOwner(userId) || getUserData().familyId == resource.data.familyId);
+      allow create: if (isOwner(userId) || (isAuthenticated() && userId.matches("^demo_.*") && request.resource.data.familyId == getUserData().familyId)) && isValidUser(request.resource.data);
       allow update: if isOwner(userId) && isValidUser(request.resource.data);
-      allow delete: if isOwner(userId) || userId.matches("^demo_.*");
+      allow delete: if isOwner(userId) || (isAuthenticated() && userId.matches("^demo_.*") && resource.data.familyId == getUserData().familyId);
     }
 
     match /families/{familyId} {

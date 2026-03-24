@@ -1,9 +1,54 @@
-@import url('https://fonts.googleapis.com/css2?family=Crete+Round:ital,wght@0,400;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #00C08B;
-  --color-brand-dark: #059669;
-  --color-brand-light: #F0FDFA;
-  --font-serif: "Crete Round", serif;
+  --color-brand: #03C17B;
+  --color-brand-dark: #029E65;
+  --color-brand-light: #F0FDF8;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  .markdown-body {
+    @apply leading-relaxed;
+  }
+  .markdown-body p {
+    @apply mb-2;
+  }
+  .markdown-body strong {
+    @apply font-bold text-brand;
+  }
+  .markdown-body em {
+    @apply italic;
+  }
+  .markdown-body u {
+    @apply underline decoration-brand/30 underline-offset-2;
+  }
+  .markdown-body a {
+    @apply text-brand underline decoration-brand/30 hover:decoration-brand transition-all;
+  }
+  .markdown-body ul {
+    @apply list-disc list-inside mb-2;
+  }
+  .markdown-body ol {
+    @apply list-decimal list-inside mb-2;
+  }
+  .markdown-body blockquote {
+    @apply border-l-4 border-brand/20 pl-4 italic text-brand/60 my-2;
+  }
+}
+
+/* Tiptap specific styles */
+.ProseMirror {
+  @apply min-h-[150px] focus:outline-none;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  @apply text-brand/30 content-[attr(data-placeholder)] float-left h-0 pointer-events-none;
+}
+.ProseMirror ul {
+  @apply list-disc list-inside;
+}
+.ProseMirror ol {
+  @apply list-decimal list-inside;
 }
