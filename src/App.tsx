@@ -755,7 +755,10 @@ export default function App() {
               </div>
             ) : (
               <DragDropContext onDragEnd={onDragEnd}>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 h-[calc(100vh-250px)] min-h-[600px]">
+                <div className={cn(
+                  "grid grid-cols-1 gap-4 h-[calc(100vh-250px)] min-h-[600px]",
+                  showNotApplicable ? "md:grid-cols-3 lg:grid-cols-5" : "md:grid-cols-2 lg:grid-cols-4"
+                )}>
                   {showNotApplicable && (
                     <BoardColumn 
                       id="not_applicable" 
