@@ -5,13 +5,21 @@
   --color-brand: #03C17B;
   --color-brand-dark: #029E65;
   --color-brand-light: #F0FDF8;
+  --color-brand-dark-bg: #0a0a0a;
+  --color-brand-dark-surface: #1a1a1a;
+  --color-brand-dark-border: #2a2a2a;
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
+@variant dark (&:where(.dark, .dark *));
+
 @layer base {
+  body {
+    @apply transition-colors duration-300;
+  }
   .markdown-body {
-    @apply leading-relaxed;
+    @apply leading-relaxed dark:text-brand-light/80;
   }
   .markdown-body p {
     @apply mb-2;

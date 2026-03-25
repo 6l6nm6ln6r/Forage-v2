@@ -75,12 +75,14 @@ import {
   Send,
   Filter,
   CheckSquare,
-  Square
+  Square,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import logo from './Forage.png';
+import { Logo } from './components/Logo';
 
 // --- Types ---
 
@@ -142,6 +144,7 @@ interface UserProfile {
   photoURL: string;
   familyId?: string;
   role?: 'student' | 'guardian';
+  darkMode?: boolean;
 }
 
 interface Family {
@@ -187,6 +190,16 @@ export default function App() {
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilterPopover, setShowFilterPopover] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [showNotApplicable, setShowNotApplicable] = useState(true);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   const filteredScholarships = React.useMemo(() => {
     let items = [...scholarships];
@@ -210,8 +223,12 @@ export default function App() {
       );
     }
 
+    if (!showNotApplicable) {
+      items = items.filter(s => s.status !== 'not_applicable');
+    }
+
     return items;
-  }, [scholarships, selectedYears, selectedStudents, searchQuery]);
+  }, [scholarships, selectedYears, selectedStudents, searchQuery, showNotApplicable]);
 
   const sortedScholarships = React.useMemo(() => {
     let sortableItems = [...filteredScholarships];
@@ -273,7 +290,9 @@ export default function App() {
         // Fetch or create profile
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (userDoc.exists()) {
-          setProfile(userDoc.data() as UserProfile);
+          const data = userDoc.data() as UserProfile;
+          setProfile(data);
+          setDarkMode(!!data.darkMode);
         } else {
           const newProfile: UserProfile = {
             uid: firebaseUser.uid,
@@ -339,6 +358,17 @@ export default function App() {
 
   const handleLogout = () => signOut(auth);
 
+  const toggleDarkMode = async () => {
+    if (!user) return;
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { darkMode: newMode });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
   const createFamily = async (name: string) => {
     if (!user) return;
     try {
@@ -394,12 +424,12 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-brand-light flex items-center justify-center">
+      <div className="min-h-screen bg-brand-light dark:bg-brand-dark-bg flex items-center justify-center transition-colors duration-300">
         <div className="animate-pulse flex flex-col items-center gap-4">
           <div className="w-20 h-20 bg-brand rounded-3xl flex items-center justify-center shadow-xl shadow-brand/20 overflow-hidden">
-            <img src={logo} className="w-12 h-12 object-contain" alt="Forage Logo" referrerPolicy="no-referrer" />
+            <Logo className="w-12 h-12 text-white" />
           </div>
-          <p className="font-serif text-brand font-bold">Gathering your future...</p>
+          <p className="font-serif text-brand dark:text-brand-light font-bold">Gathering your future...</p>
         </div>
       </div>
     );
@@ -414,21 +444,21 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-light text-[#1a1a1a] font-sans">
+    <div className="min-h-screen bg-brand-light dark:bg-brand-dark-bg text-brand dark:text-brand-light font-sans transition-colors duration-300">
       {/* Header */}
-      <header className="bg-white border-b border-brand/10 sticky top-0 z-30">
+      <header className="bg-white dark:bg-brand-dark-bg border-b border-brand/10 dark:border-brand/20 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-brand rounded-xl flex items-center justify-center shadow-sm overflow-hidden">
-              <img src={logo} className="w-6 h-6 object-contain" alt="Forage Logo" referrerPolicy="no-referrer" />
+              <Logo className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-2xl font-serif font-bold text-brand tracking-tight">Forage</h1>
+            <h1 className="text-2xl font-serif font-bold text-brand dark:text-brand-light tracking-tight">Forage</h1>
           </div>
           
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setShowSettingsModal(true)}
-              className="w-10 h-10 rounded-full bg-brand-light flex items-center justify-center overflow-hidden border border-brand/10 hover:ring-2 hover:ring-brand/20 transition-all"
+              className="w-10 h-10 rounded-full bg-brand-light dark:bg-brand/10 flex items-center justify-center overflow-hidden border border-brand/10 dark:border-brand/20 hover:ring-2 hover:ring-brand/20 transition-all"
               title="Settings & Profile"
             >
               <img 
@@ -447,13 +477,13 @@ export default function App() {
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-center justify-between md:justify-start gap-6">
-                <h2 className="text-3xl font-serif text-[#1a1a1a]">Scholarships</h2>
-                <div className="flex bg-brand-light p-1 rounded-xl border border-brand/10">
+                <h2 className="text-3xl font-serif text-[#1a1a1a] dark:text-brand-light">Scholarships</h2>
+                <div className="flex bg-brand-light dark:bg-brand/10 p-1 rounded-xl border border-brand/10 dark:border-brand/20">
                   <button 
                     onClick={() => setViewMode('table')}
                     className={cn(
                       "p-2 rounded-lg transition-all flex items-center gap-2 text-sm font-bold",
-                      viewMode === 'table' ? "bg-white text-brand shadow-sm" : "text-brand/40 hover:text-brand"
+                      viewMode === 'table' ? "bg-white dark:bg-brand/20 text-brand dark:text-brand-light shadow-sm" : "text-brand/40 dark:text-brand-light/40 hover:text-brand dark:hover:text-brand-light"
                     )}
                   >
                     <TableIcon className="w-4 h-4" />
@@ -463,7 +493,7 @@ export default function App() {
                     onClick={() => setViewMode('board')}
                     className={cn(
                       "p-2 rounded-lg transition-all flex items-center gap-2 text-sm font-bold",
-                      viewMode === 'board' ? "bg-white text-brand shadow-sm" : "text-brand/40 hover:text-brand"
+                      viewMode === 'board' ? "bg-white dark:bg-brand/20 text-brand dark:text-brand-light shadow-sm" : "text-brand/40 dark:text-brand-light/40 hover:text-brand dark:hover:text-brand-light"
                     )}
                   >
                     <LayoutGrid className="w-4 h-4" />
@@ -480,12 +510,12 @@ export default function App() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search scholarships..."
-                    className="pl-9 pr-4 py-2 bg-white border border-brand/10 rounded-xl text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all w-full"
+                    className="pl-9 pr-4 py-2 bg-white dark:bg-brand/5 border border-brand/10 dark:border-brand/20 rounded-xl text-sm focus:ring-2 focus:ring-brand focus:border-transparent transition-all w-full dark:text-brand-light"
                   />
                   {searchQuery && (
                     <button 
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-brand-light rounded-lg text-brand/40 hover:text-brand transition-colors"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-brand-light dark:hover:bg-brand/10 rounded-lg text-brand/40 dark:text-brand-light/40 hover:text-brand dark:hover:text-brand-light transition-colors"
                     >
                       <XCircle className="w-3.5 h-3.5" />
                     </button>
@@ -499,7 +529,7 @@ export default function App() {
                       "p-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold border",
                       selectedYears.length > 0 || selectedStudents.length > 0
                         ? "bg-brand text-white border-brand"
-                        : "bg-white text-brand/60 border-brand/10 hover:border-brand/30"
+                        : "bg-white dark:bg-brand/5 text-brand/60 dark:text-brand-light/60 border-brand/10 dark:border-brand/20 hover:border-brand/30"
                     )}
                   >
                     <Filter className="w-4 h-4" />
@@ -519,10 +549,10 @@ export default function App() {
                           initial={{ opacity: 0, y: 10, scale: 0.95 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                          className="absolute right-0 mt-2 w-64 bg-white rounded-3xl shadow-2xl border border-brand/10 p-6 z-50 space-y-6"
+                          className="absolute right-0 mt-2 w-64 bg-white dark:bg-brand-dark-surface rounded-3xl shadow-2xl border border-brand/10 dark:border-brand/20 p-6 z-50 space-y-6"
                         >
                           <div>
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-brand/40 mb-3">Academic Year</h4>
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-brand/40 dark:text-brand-light/40 mb-3">Academic Year</h4>
                             <div className="space-y-2">
                               {Array.from(new Set(scholarships.map(s => s.academicYear).filter(Boolean))).sort().map(year => (
                                 <button 
@@ -535,11 +565,11 @@ export default function App() {
                                   className="flex items-center gap-2 w-full text-left group"
                                 >
                                   {selectedYears.includes(year!) ? (
-                                    <CheckSquare className="w-4 h-4 text-brand" />
+                                    <CheckSquare className="w-4 h-4 text-brand dark:text-brand-light" />
                                   ) : (
-                                    <Square className="w-4 h-4 text-brand/20 group-hover:text-brand/40" />
+                                    <Square className="w-4 h-4 text-brand/20 dark:text-brand-light/20 group-hover:text-brand/40 dark:group-hover:text-brand-light/40" />
                                   )}
-                                  <span className={cn("text-sm", selectedYears.includes(year!) ? "text-brand font-bold" : "text-brand/60")}>
+                                  <span className={cn("text-sm", selectedYears.includes(year!) ? "text-brand dark:text-brand-light font-bold" : "text-brand/60 dark:text-brand-light/60")}>
                                     {year}
                                   </span>
                                 </button>
@@ -554,11 +584,11 @@ export default function App() {
                                   className="flex items-center gap-2 w-full text-left group"
                                 >
                                   {selectedYears.includes('unspecified') ? (
-                                    <CheckSquare className="w-4 h-4 text-brand" />
+                                    <CheckSquare className="w-4 h-4 text-brand dark:text-brand-light" />
                                   ) : (
-                                    <Square className="w-4 h-4 text-brand/20 group-hover:text-brand/40" />
+                                    <Square className="w-4 h-4 text-brand/20 dark:text-brand-light/20 group-hover:text-brand/40 dark:group-hover:text-brand-light/40" />
                                   )}
-                                  <span className={cn("text-sm", selectedYears.includes('unspecified') ? "text-brand font-bold" : "text-brand/60")}>
+                                  <span className={cn("text-sm", selectedYears.includes('unspecified') ? "text-brand dark:text-brand-light font-bold" : "text-brand/60 dark:text-brand-light/60")}>
                                     Unspecified
                                   </span>
                                 </button>
@@ -567,7 +597,7 @@ export default function App() {
                           </div>
 
                           <div>
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-brand/40 mb-3">Students</h4>
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-brand/40 dark:text-brand-light/40 mb-3">Students</h4>
                             <div className="space-y-2">
                               {familyMembers.filter(m => m.role === 'student').map(student => (
                                 <button 
@@ -580,11 +610,11 @@ export default function App() {
                                   className="flex items-center gap-2 w-full text-left group"
                                 >
                                   {selectedStudents.includes(student.uid) ? (
-                                    <CheckSquare className="w-4 h-4 text-brand" />
+                                    <CheckSquare className="w-4 h-4 text-brand dark:text-brand-light" />
                                   ) : (
-                                    <Square className="w-4 h-4 text-brand/20 group-hover:text-brand/40" />
+                                    <Square className="w-4 h-4 text-brand/20 dark:text-brand-light/20 group-hover:text-brand/40 dark:group-hover:text-brand-light/40" />
                                   )}
-                                  <span className={cn("text-sm", selectedStudents.includes(student.uid) ? "text-brand font-bold" : "text-brand/60")}>
+                                  <span className={cn("text-sm", selectedStudents.includes(student.uid) ? "text-brand dark:text-brand-light font-bold" : "text-brand/60 dark:text-brand-light/60")}>
                                     {student.displayName}
                                   </span>
                                 </button>
@@ -592,15 +622,33 @@ export default function App() {
                             </div>
                           </div>
 
-                          {(selectedYears.length > 0 || selectedStudents.length > 0 || searchQuery) && (
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-brand/40 dark:text-brand-light/40 mb-3">Visibility</h4>
+                            <button 
+                              onClick={() => setShowNotApplicable(!showNotApplicable)}
+                              className="flex items-center gap-2 w-full text-left group"
+                            >
+                              {showNotApplicable ? (
+                                <CheckSquare className="w-4 h-4 text-brand dark:text-brand-light" />
+                              ) : (
+                                <Square className="w-4 h-4 text-brand/20 dark:text-brand-light/20 group-hover:text-brand/40 dark:group-hover:text-brand-light/40" />
+                              )}
+                              <span className={cn("text-sm", showNotApplicable ? "text-brand dark:text-brand-light font-bold" : "text-brand/60 dark:text-brand-light/60")}>
+                                Show Not Applicable
+                              </span>
+                            </button>
+                          </div>
+
+                          {(selectedYears.length > 0 || selectedStudents.length > 0 || searchQuery || !showNotApplicable) && (
                             <button 
                               onClick={() => {
                                 setSelectedYears([]);
                                 setSelectedStudents([]);
                                 setSearchQuery('');
+                                setShowNotApplicable(true);
                                 setShowFilterPopover(false);
                               }}
-                              className="w-full py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                              className="w-full py-2 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors"
                             >
                               Clear All Filters
                             </button>
@@ -625,62 +673,62 @@ export default function App() {
             </div>
 
             {viewMode === 'table' ? (
-              <div className="bg-white rounded-[32px] overflow-hidden border border-brand/10 shadow-sm">
+              <div className="bg-white dark:bg-brand-dark-surface rounded-[32px] overflow-hidden border border-brand/10 dark:border-brand/20 shadow-sm">
                 {scholarships?.length === 0 ? (
                   <div className="p-12 text-center">
-                    <img src={logo} className="w-16 h-16 mx-auto mb-4 opacity-20 grayscale" alt="No scholarships" referrerPolicy="no-referrer" />
-                    <p className="text-brand/60 italic">No scholarships recorded yet. Start foraging!</p>
+                    <Logo className="w-16 h-16 mx-auto mb-4 opacity-20 grayscale dark:invert dark:opacity-10" />
+                    <p className="text-brand/60 dark:text-brand-light/60 italic">No scholarships recorded yet. Start foraging!</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="bg-brand-light/50 border-b border-brand/10">
+                        <tr className="bg-brand-light/50 dark:bg-brand/10 border-b border-brand/10 dark:border-brand/20">
                           <th 
-                            className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 cursor-pointer hover:text-brand transition-colors"
+                            className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 cursor-pointer hover:text-brand dark:hover:text-brand-light transition-colors"
                             onClick={() => requestSort('title')}
                           >
                             <div className="flex items-center gap-1">
                               Scholarship
                               <div className="flex flex-col">
-                                <ChevronUp className={cn("w-3 h-3 -mb-1", sortConfig?.key === 'title' && sortConfig.direction === 'asc' ? "text-brand" : "text-brand/20")} />
-                                <ChevronDown className={cn("w-3 h-3", sortConfig?.key === 'title' && sortConfig.direction === 'desc' ? "text-brand" : "text-brand/20")} />
+                                <ChevronUp className={cn("w-3 h-3 -mb-1", sortConfig?.key === 'title' && sortConfig.direction === 'asc' ? "text-brand dark:text-brand-light" : "text-brand/20 dark:text-brand-light/20")} />
+                                <ChevronDown className={cn("w-3 h-3", sortConfig?.key === 'title' && sortConfig.direction === 'desc' ? "text-brand dark:text-brand-light" : "text-brand/20 dark:text-brand-light/20")} />
                               </div>
                             </div>
                           </th>
                           <th 
-                            className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 cursor-pointer hover:text-brand transition-colors"
+                            className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 cursor-pointer hover:text-brand dark:hover:text-brand-light transition-colors"
                             onClick={() => requestSort('amount')}
                           >
                             <div className="flex items-center gap-1">
                               Amount
                               <div className="flex flex-col">
-                                <ChevronUp className={cn("w-3 h-3 -mb-1", sortConfig?.key === 'amount' && sortConfig.direction === 'asc' ? "text-brand" : "text-brand/20")} />
-                                <ChevronDown className={cn("w-3 h-3", sortConfig?.key === 'amount' && sortConfig.direction === 'desc' ? "text-brand" : "text-brand/20")} />
+                                <ChevronUp className={cn("w-3 h-3 -mb-1", sortConfig?.key === 'amount' && sortConfig.direction === 'asc' ? "text-brand dark:text-brand-light" : "text-brand/20 dark:text-brand-light/20")} />
+                                <ChevronDown className={cn("w-3 h-3", sortConfig?.key === 'amount' && sortConfig.direction === 'desc' ? "text-brand dark:text-brand-light" : "text-brand/20 dark:text-brand-light/20")} />
                               </div>
                             </div>
                           </th>
                           <th 
-                            className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 cursor-pointer hover:text-brand transition-colors"
+                            className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 cursor-pointer hover:text-brand dark:hover:text-brand-light transition-colors"
                             onClick={() => requestSort('deadline')}
                           >
                             <div className="flex items-center gap-1">
                               Deadline
                               <div className="flex flex-col">
-                                <ChevronUp className={cn("w-3 h-3 -mb-1", sortConfig?.key === 'deadline' && sortConfig.direction === 'asc' ? "text-brand" : "text-brand/20")} />
-                                <ChevronDown className={cn("w-3 h-3", sortConfig?.key === 'deadline' && sortConfig.direction === 'desc' ? "text-brand" : "text-brand/20")} />
+                                <ChevronUp className={cn("w-3 h-3 -mb-1", sortConfig?.key === 'deadline' && sortConfig.direction === 'asc' ? "text-brand dark:text-brand-light" : "text-brand/20 dark:text-brand-light/20")} />
+                                <ChevronDown className={cn("w-3 h-3", sortConfig?.key === 'deadline' && sortConfig.direction === 'desc' ? "text-brand dark:text-brand-light" : "text-brand/20 dark:text-brand-light/20")} />
                               </div>
                             </div>
                           </th>
                           <th 
-                            className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 cursor-pointer hover:text-brand transition-colors"
+                            className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 cursor-pointer hover:text-brand dark:hover:text-brand-light transition-colors"
                             onClick={() => requestSort('status')}
                           >
                             <div className="flex items-center gap-1">
                               Status
                               <div className="flex flex-col">
-                                <ChevronUp className={cn("w-3 h-3 -mb-1", sortConfig?.key === 'status' && sortConfig.direction === 'asc' ? "text-brand" : "text-brand/20")} />
-                                <ChevronDown className={cn("w-3 h-3", sortConfig?.key === 'status' && sortConfig.direction === 'desc' ? "text-brand" : "text-brand/20")} />
+                                <ChevronUp className={cn("w-3 h-3 -mb-1", sortConfig?.key === 'status' && sortConfig.direction === 'asc' ? "text-brand dark:text-brand-light" : "text-brand/20 dark:text-brand-light/20")} />
+                                <ChevronDown className={cn("w-3 h-3", sortConfig?.key === 'status' && sortConfig.direction === 'desc' ? "text-brand dark:text-brand-light" : "text-brand/20 dark:text-brand-light/20")} />
                               </div>
                             </div>
                           </th>
@@ -708,20 +756,23 @@ export default function App() {
             ) : (
               <DragDropContext onDragEnd={onDragEnd}>
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 h-[calc(100vh-250px)] min-h-[600px]">
+                  {showNotApplicable && (
+                    <BoardColumn 
+                      id="not_applicable" 
+                      title="Not Applicable" 
+                      scholarships={filteredScholarships.filter(s => s.status === 'not_applicable')} 
+                      onEdit={(s) => { 
+                        setEditingScholarship(s); 
+                        setActivePage('scholarship-form'); 
+                      }}
+                      familyMembers={familyMembers}
+                      isNotApplicable
+                    />
+                  )}
                   <BoardColumn 
                     id="intake" 
                     title="Intake" 
                     scholarships={filteredScholarships.filter(s => s.status === 'intake')} 
-                    onEdit={(s) => { 
-                      setEditingScholarship(s); 
-                      setActivePage('scholarship-form'); 
-                    }}
-                    familyMembers={familyMembers}
-                  />
-                  <BoardColumn 
-                    id="not_applicable" 
-                    title="Not Applicable" 
-                    scholarships={filteredScholarships.filter(s => s.status === 'not_applicable')} 
                     onEdit={(s) => { 
                       setEditingScholarship(s); 
                       setActivePage('scholarship-form'); 
@@ -791,6 +842,8 @@ export default function App() {
             scholarships={scholarships}
             showToast={showToast}
             setConfirmModal={setConfirmModal}
+            darkMode={darkMode}
+            onToggleDarkMode={toggleDarkMode}
           />
         )}
         {confirmModal && (
@@ -847,17 +900,17 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: { title: string, 
 
 function LandingPage({ onLogin }: { onLogin: () => void }) {
   return (
-    <div className="min-h-screen bg-brand-light flex flex-col items-center justify-center p-4 text-center">
+    <div className="min-h-screen bg-brand-light dark:bg-brand-dark-bg flex flex-col items-center justify-center p-4 text-center transition-colors duration-300">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="max-w-2xl"
       >
         <div className="w-40 h-40 bg-brand rounded-[40px] flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-brand/30 overflow-hidden ring-4 ring-white/20">
-          <img src={logo} className="w-24 h-24 object-contain" alt="Forage Logo" referrerPolicy="no-referrer" />
+          <Logo className="w-24 h-24 text-white" />
         </div>
-        <h1 className="text-5xl sm:text-7xl font-serif font-bold text-brand mb-6 tracking-tight">Forage</h1>
-        <p className="text-xl sm:text-2xl text-brand/70 mb-12 font-serif max-w-lg mx-auto leading-relaxed">
+        <h1 className="text-5xl sm:text-7xl font-serif font-bold text-brand dark:text-brand-light mb-6 tracking-tight">Forage</h1>
+        <p className="text-xl sm:text-2xl text-brand/70 dark:text-brand-light/70 mb-12 font-serif max-w-lg mx-auto leading-relaxed">
           A collaborative space for families to gather, track, and secure their educational future.
         </p>
         <button 
@@ -880,16 +933,16 @@ function FamilySetup({ onCreate, onJoin }: { onCreate: (n: string) => void, onJo
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
 
   return (
-    <div className="min-h-screen bg-brand-light flex items-center justify-center p-4">
+    <div className="min-h-screen bg-brand-light dark:bg-brand-dark-bg flex items-center justify-center p-4 transition-colors duration-300">
       <motion.div 
         layout
-        className="bg-white p-10 rounded-[40px] shadow-2xl border border-brand/10 w-full max-w-md"
+        className="bg-white dark:bg-brand-dark-surface p-10 rounded-[40px] shadow-2xl border border-brand/10 dark:border-brand/20 w-full max-w-md"
       >
-        <div className="w-24 h-24 bg-brand/10 rounded-3xl flex items-center justify-center mx-auto mb-8 overflow-hidden">
-          <img src={logo} className="w-14 h-14 object-contain" alt="Forage Logo" referrerPolicy="no-referrer" />
+        <div className="w-24 h-24 bg-brand/10 dark:bg-brand/20 rounded-3xl flex items-center justify-center mx-auto mb-8 overflow-hidden">
+          <Logo className="w-14 h-14 text-brand dark:text-brand-light" />
         </div>
-        <h2 className="text-3xl font-serif text-center mb-2 text-brand">Welcome to Forage</h2>
-        <p className="text-center text-brand/60 mb-10">Let's get your family started.</p>
+        <h2 className="text-3xl font-serif text-center mb-2 text-brand dark:text-brand-light">Welcome to Forage</h2>
+        <p className="text-center text-brand/60 dark:text-brand-light/60 mb-10">Let's get your family started.</p>
         
         <AnimatePresence mode="wait">
           {mode === 'choose' && (
@@ -900,29 +953,29 @@ function FamilySetup({ onCreate, onJoin }: { onCreate: (n: string) => void, onJo
             >
               <button 
                 onClick={() => setMode('create')}
-                className="w-full p-6 text-left rounded-3xl border-2 border-transparent hover:border-brand bg-brand-light transition-all group"
+                className="w-full p-6 text-left rounded-3xl border-2 border-transparent hover:border-brand bg-brand-light dark:bg-brand/5 transition-all group"
               >
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-white rounded-2xl shadow-sm group-hover:scale-110 transition-transform">
-                    <Plus className="w-6 h-6 text-brand" />
+                  <div className="p-3 bg-white dark:bg-brand/10 rounded-2xl shadow-sm group-hover:scale-110 transition-transform">
+                    <Plus className="w-6 h-6 text-brand dark:text-brand-light" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg text-brand">Create a Family</h3>
-                    <p className="text-sm text-brand/60 italic">Start a new group for your household.</p>
+                    <h3 className="font-bold text-lg text-brand dark:text-brand-light">Create a Family</h3>
+                    <p className="text-sm text-brand/60 dark:text-brand-light/60 italic">Start a new group for your household.</p>
                   </div>
                 </div>
               </button>
               <button 
                 onClick={() => setMode('join')}
-                className="w-full p-6 text-left rounded-3xl border-2 border-transparent hover:border-brand bg-brand-light transition-all group"
+                className="w-full p-6 text-left rounded-3xl border-2 border-transparent hover:border-brand bg-brand-light dark:bg-brand/5 transition-all group"
               >
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-white rounded-2xl shadow-sm group-hover:scale-110 transition-transform">
-                    <Users className="w-6 h-6 text-brand" />
+                  <div className="p-3 bg-white dark:bg-brand/10 rounded-2xl shadow-sm group-hover:scale-110 transition-transform">
+                    <Users className="w-6 h-6 text-brand dark:text-brand-light" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg text-brand">Join a Family</h3>
-                    <p className="text-sm text-brand/60 italic">Enter a code shared by a family member.</p>
+                    <h3 className="font-bold text-lg text-brand dark:text-brand-light">Join a Family</h3>
+                    <p className="text-sm text-brand/60 dark:text-brand-light/60 italic">Enter a code shared by a family member.</p>
                   </div>
                 </div>
               </button>
@@ -936,17 +989,17 @@ function FamilySetup({ onCreate, onJoin }: { onCreate: (n: string) => void, onJo
               className="space-y-6"
             >
               <div>
-                <label className="block text-sm font-medium mb-2">Family Name</label>
+                <label className="block text-sm font-medium mb-2 text-brand dark:text-brand-light">Family Name</label>
                 <input 
                   type="text" 
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. The Smith Family"
-                  className="w-full p-4 rounded-xl bg-brand-light border-none focus:ring-2 focus:ring-brand"
+                  className="w-full p-4 rounded-xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand dark:text-brand-light"
                 />
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setMode('choose')} className="flex-1 py-4 text-brand font-bold hover:bg-brand-light rounded-xl transition-colors">Back</button>
+                <button onClick={() => setMode('choose')} className="flex-1 py-4 text-brand dark:text-brand-light font-bold hover:bg-brand-light dark:hover:bg-brand/10 rounded-xl transition-colors">Back</button>
                 <button 
                   onClick={() => onCreate(name)}
                   disabled={!name}
@@ -965,17 +1018,17 @@ function FamilySetup({ onCreate, onJoin }: { onCreate: (n: string) => void, onJo
               className="space-y-6"
             >
               <div>
-                <label className="block text-sm font-medium mb-2">Family ID</label>
+                <label className="block text-sm font-medium mb-2 text-brand dark:text-brand-light">Family ID</label>
                 <input 
                   type="text" 
                   value={joinId}
                   onChange={(e) => setJoinId(e.target.value)}
                   placeholder="Paste family code here"
-                  className="w-full p-4 rounded-xl bg-brand-light border-none focus:ring-2 focus:ring-brand"
+                  className="w-full p-4 rounded-xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand dark:text-brand-light"
                 />
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setMode('choose')} className="flex-1 py-4 text-brand font-bold hover:bg-brand-light rounded-xl transition-colors">Back</button>
+                <button onClick={() => setMode('choose')} className="flex-1 py-4 text-brand dark:text-brand-light font-bold hover:bg-brand-light dark:hover:bg-brand/10 rounded-xl transition-colors">Back</button>
                 <button 
                   onClick={() => onJoin(joinId)}
                   disabled={!joinId}
@@ -994,11 +1047,11 @@ function FamilySetup({ onCreate, onJoin }: { onCreate: (n: string) => void, onJo
 
 function ScholarshipRow({ scholarship, onEdit, setConfirmModal, showToast, familyMembers }: { scholarship: Scholarship, onEdit: () => void, setConfirmModal: (v: any) => void, showToast: (m: string, t?: 'success' | 'error') => void, familyMembers: UserProfile[], key?: React.Key }) {
   const statusConfig = {
-    intake: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Intake' },
-    not_applicable: { icon: HelpCircle, color: 'text-gray-600', bg: 'bg-gray-50', label: 'Not Applicable' },
-    need_to_apply: { icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50', label: 'Need to Apply' },
-    in_progress: { icon: Clock, color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'In Progress' },
-    applied: { icon: Send, color: 'text-green-600', bg: 'bg-green-50', label: 'Applied' },
+    intake: { icon: Info, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', label: 'Intake' },
+    not_applicable: { icon: HelpCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', label: 'Not Applicable' },
+    need_to_apply: { icon: FileText, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20', label: 'Need to Apply' },
+    in_progress: { icon: Clock, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20', label: 'In Progress' },
+    applied: { icon: Send, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', label: 'Applied' },
   };
 
   const config = statusConfig[scholarship.status] || statusConfig.intake;
@@ -1007,16 +1060,16 @@ function ScholarshipRow({ scholarship, onEdit, setConfirmModal, showToast, famil
   return (
     <tr 
       onClick={onEdit}
-      className="border-b border-brand/5 hover:bg-brand-light/30 transition-colors group cursor-pointer"
+      className="border-b border-brand/5 dark:border-brand/10 hover:bg-brand-light/30 dark:hover:bg-brand/5 transition-colors group cursor-pointer"
     >
       <td className="px-6 py-4">
         <div className="text-left group/title">
-          <p className="font-serif font-bold text-lg text-[#1a1a1a] group-hover/title:text-brand transition-colors">
+          <p className="font-serif font-bold text-lg text-[#1a1a1a] dark:text-brand-light group-hover/title:text-brand transition-colors">
             {scholarship.title}
           </p>
           <div className="flex items-center gap-2">
             {scholarship.academicYear && (
-              <span className="text-[10px] bg-brand/5 text-brand px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+              <span className="text-[10px] bg-brand/5 dark:bg-brand/10 text-brand dark:text-brand-light px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
                 {scholarship.academicYear}
               </span>
             )}
@@ -1067,7 +1120,7 @@ function RichTextEditor({ value, onChange, placeholder }: { value: string, onCha
     },
     editorProps: {
       attributes: {
-        class: 'markdown-body text-sm text-brand/80 focus:outline-none min-h-[150px] p-5 rounded-2xl bg-brand-light',
+        class: 'markdown-body dark:prose-invert text-sm text-brand/80 dark:text-brand-light/80 focus:outline-none min-h-[150px] p-5 rounded-2xl bg-brand-light dark:bg-brand/5',
       },
     },
   });
@@ -1076,11 +1129,11 @@ function RichTextEditor({ value, onChange, placeholder }: { value: string, onCha
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1 p-1 bg-brand-light rounded-xl border border-brand/5 w-fit">
+      <div className="flex items-center gap-1 p-1 bg-brand-light dark:bg-brand/5 rounded-xl border border-brand/5 dark:border-brand/20 w-fit">
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
-          className={cn("p-2 rounded-lg transition-all", editor.isActive('bold') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 text-brand/60")}
+          className={cn("p-2 rounded-lg transition-all", editor.isActive('bold') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 dark:hover:bg-brand/20 text-brand/60 dark:text-brand-light/60")}
           title="Bold"
         >
           <Bold className="w-4 h-4" />
@@ -1088,7 +1141,7 @@ function RichTextEditor({ value, onChange, placeholder }: { value: string, onCha
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          className={cn("p-2 rounded-lg transition-all", editor.isActive('italic') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 text-brand/60")}
+          className={cn("p-2 rounded-lg transition-all", editor.isActive('italic') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 dark:hover:bg-brand/20 text-brand/60 dark:text-brand-light/60")}
           title="Italic"
         >
           <Italic className="w-4 h-4" />
@@ -1096,16 +1149,16 @@ function RichTextEditor({ value, onChange, placeholder }: { value: string, onCha
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleUnderline().run()}
-          className={cn("p-2 rounded-lg transition-all", editor.isActive('underline') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 text-brand/60")}
+          className={cn("p-2 rounded-lg transition-all", editor.isActive('underline') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 dark:hover:bg-brand/20 text-brand/60 dark:text-brand-light/60")}
           title="Underline"
         >
           <UnderlineIcon className="w-4 h-4" />
         </button>
-        <div className="w-px h-4 bg-brand/10 mx-1" />
+        <div className="w-px h-4 bg-brand/10 dark:bg-brand/20 mx-1" />
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={cn("p-2 rounded-lg transition-all", editor.isActive('bulletList') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 text-brand/60")}
+          className={cn("p-2 rounded-lg transition-all", editor.isActive('bulletList') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 dark:hover:bg-brand/20 text-brand/60 dark:text-brand-light/60")}
           title="Bullet List"
         >
           <List className="w-4 h-4" />
@@ -1113,12 +1166,12 @@ function RichTextEditor({ value, onChange, placeholder }: { value: string, onCha
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className={cn("p-2 rounded-lg transition-all", editor.isActive('orderedList') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 text-brand/60")}
+          className={cn("p-2 rounded-lg transition-all", editor.isActive('orderedList') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 dark:hover:bg-brand/20 text-brand/60 dark:text-brand-light/60")}
           title="Ordered List"
         >
           <ListOrdered className="w-4 h-4" />
         </button>
-        <div className="w-px h-4 bg-brand/10 mx-1" />
+        <div className="w-px h-4 bg-brand/10 dark:bg-brand/20 mx-1" />
         <button
           type="button"
           onClick={() => {
@@ -1129,7 +1182,7 @@ function RichTextEditor({ value, onChange, placeholder }: { value: string, onCha
               editor.chain().focus().unsetLink().run();
             }
           }}
-          className={cn("p-2 rounded-lg transition-all", editor.isActive('link') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 text-brand/60")}
+          className={cn("p-2 rounded-lg transition-all", editor.isActive('link') ? "bg-brand text-white shadow-sm" : "hover:bg-brand/10 dark:hover:bg-brand/20 text-brand/60 dark:text-brand-light/60")}
           title="Link"
         >
           <LinkIcon className="w-4 h-4" />
@@ -1223,70 +1276,52 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
       <div className="flex items-center justify-between mb-8">
         <button 
           onClick={onClose}
-          className="flex items-center gap-2 text-brand/60 hover:text-brand font-bold transition-colors"
+          className="flex items-center gap-2 text-brand/60 dark:text-brand-light/60 hover:text-brand dark:hover:text-brand-light font-bold transition-colors"
         >
           <ChevronRight className="w-5 h-5 rotate-180" />
           <span className="hidden sm:inline">Back to Dashboard</span>
           <span className="sm:hidden">Back</span>
         </button>
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl sm:text-4xl font-serif text-brand font-bold">{editing ? 'Edit' : 'Add'} Scholarship</h2>
-        </div>
-        {editing && (
-          <button 
-            onClick={handleDelete}
-            className="flex items-center gap-2 text-red-500 hover:text-red-600 font-bold transition-colors"
-          >
-            <Trash2 className="w-5 h-5" />
-            <span className="hidden sm:inline">Delete Scholarship</span>
-            <span className="sm:hidden">Delete</span>
-          </button>
-        )}
       </div>
 
-      <div className="bg-white rounded-[40px] shadow-sm border border-brand/10 overflow-hidden">
-        <div className="p-6 sm:p-10 border-b border-brand/10 bg-brand-light/30">
-          <h2 className="text-2xl sm:text-4xl font-serif text-brand font-bold">{editing ? 'Edit' : 'Add'} Scholarship</h2>
-          <p className="text-brand/60 font-serif mt-2">Fill in the details for this educational opportunity.</p>
-        </div>
-        
+      <div className="bg-white dark:bg-brand-dark-surface rounded-[40px] shadow-sm border border-brand/10 dark:border-brand/20 overflow-hidden">
         <form onSubmit={handleSubmit} className="p-10 space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-2 md:col-span-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 ml-1">Title *</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 ml-1">Title *</label>
               <input 
                 required
                 value={formData.title}
                 onChange={e => setFormData({ ...formData, title: e.target.value })}
-                className="w-full p-5 rounded-2xl bg-brand-light border-none focus:ring-2 focus:ring-brand text-lg"
+                className="w-full p-5 rounded-2xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand text-lg dark:text-brand-light"
                 placeholder="e.g. National Merit Scholarship"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 ml-1">Amount ($)</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 ml-1">Amount ($)</label>
               <input 
                 type="number"
                 value={formData.amount}
                 onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                className="w-full p-5 rounded-2xl bg-brand-light border-none focus:ring-2 focus:ring-brand"
+                className="w-full p-5 rounded-2xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand dark:text-brand-light"
                 placeholder="0.00"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 ml-1">Deadline</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 ml-1">Deadline</label>
               <input 
                 type="date"
                 value={formData.deadline}
                 onChange={e => setFormData({ ...formData, deadline: e.target.value })}
-                className="w-full p-5 rounded-2xl bg-brand-light border-none focus:ring-2 focus:ring-brand"
+                className="w-full p-5 rounded-2xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand dark:text-brand-light"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 ml-1">Academic Year</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 ml-1">Academic Year</label>
               <select 
                 value={formData.academicYear}
                 onChange={e => setFormData({ ...formData, academicYear: e.target.value })}
-                className="w-full p-5 rounded-2xl bg-brand-light border-none focus:ring-2 focus:ring-brand appearance-none"
+                className="w-full p-5 rounded-2xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand appearance-none dark:text-brand-light"
               >
                 <option value="">Select Year</option>
                 <option value="2024-2025">2024-2025</option>
@@ -1300,11 +1335,11 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 ml-1">Status</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 ml-1">Status</label>
               <select 
                 value={formData.status}
                 onChange={e => setFormData({ ...formData, status: e.target.value as any })}
-                className="w-full p-5 rounded-2xl bg-brand-light border-none focus:ring-2 focus:ring-brand appearance-none"
+                className="w-full p-5 rounded-2xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand appearance-none dark:text-brand-light"
               >
                 <option value="intake">Intake</option>
                 <option value="not_applicable">Not Applicable</option>
@@ -1314,7 +1349,7 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
               </select>
             </div>
             <div className="space-y-4 md:col-span-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 ml-1">Applicable Students</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 ml-1">Applicable Students</label>
               <div className="flex flex-wrap gap-3">
                 {students.length > 0 ? (
                   students.map(student => (
@@ -1326,7 +1361,7 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
                         "flex items-center gap-3 p-3 pr-5 rounded-2xl border-2 transition-all",
                         formData.applicableStudents.includes(student.uid)
                           ? "bg-brand text-white border-brand shadow-lg shadow-brand/20"
-                          : "bg-brand-light border-transparent text-brand/60 hover:border-brand/20"
+                          : "bg-brand-light dark:bg-brand/5 border-transparent dark:border-brand/20 text-brand/60 dark:text-brand-light/60 hover:border-brand/20"
                       )}
                     >
                       <img 
@@ -1339,19 +1374,19 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
                     </button>
                   ))
                 ) : (
-                  <p className="text-sm text-brand/40 italic p-4 bg-brand-light rounded-2xl w-full">
+                  <p className="text-sm text-brand/40 dark:text-brand-light/40 italic p-4 bg-brand-light dark:bg-brand/5 rounded-2xl w-full">
                     No students found in your family. Add them in Settings.
                   </p>
                 )}
               </div>
             </div>
             <div className="space-y-2 md:col-span-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 ml-1">URL</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 ml-1">URL</label>
               <input 
                 type="url"
                 value={formData.url}
                 onChange={e => setFormData({ ...formData, url: e.target.value })}
-                className="w-full p-5 rounded-2xl bg-brand-light border-none focus:ring-2 focus:ring-brand"
+                className="w-full p-5 rounded-2xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand dark:text-brand-light"
                 placeholder="https://..."
               />
             </div>
@@ -1367,7 +1402,7 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
             <button 
               type="button"
               onClick={onClose}
-              className="flex-1 py-5 border border-brand/20 text-brand rounded-2xl font-bold text-lg hover:bg-brand-light transition-all"
+              className="flex-1 py-5 border border-brand/20 dark:border-brand/30 text-brand dark:text-brand-light rounded-2xl font-bold text-lg hover:bg-brand-light dark:hover:bg-brand/10 transition-all"
             >
               Cancel
             </button>
@@ -1380,11 +1415,23 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
           </div>
         </form>
       </div>
+
+      {editing && (
+        <div className="mt-8 flex justify-center">
+          <button 
+            onClick={handleDelete}
+            className="flex items-center gap-2 text-red-500 hover:text-red-600 font-bold transition-colors py-3 px-6 rounded-2xl hover:bg-red-50 dark:hover:bg-red-500/10"
+          >
+            <Trash2 className="w-5 h-5" />
+            <span>Delete Scholarship</span>
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 }
 
-function FamilySection({ family, profile }: { family: Family | null, profile: UserProfile }) {
+function FamilySection({ family, profile }: { family: Family | null, profile: UserProfile | null }) {
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [copied, setCopied] = useState(false);
 
@@ -1409,33 +1456,33 @@ function FamilySection({ family, profile }: { family: Family | null, profile: Us
   };
 
   return (
-    <div className="bg-white rounded-[32px] p-8 border border-brand/10 shadow-sm">
+    <div className="bg-white dark:bg-brand/5 rounded-[32px] p-8 border border-brand/10 dark:border-brand/20 shadow-sm">
       <div className="flex items-center gap-3 mb-6">
-        <Users className="w-6 h-6 text-brand" />
-        <h3 className="text-xl font-serif font-bold text-brand">Family Members</h3>
+        <Users className="w-6 h-6 text-brand dark:text-brand-light" />
+        <h3 className="text-xl font-serif font-bold text-brand dark:text-brand-light">Family Members</h3>
       </div>
 
       <div className="space-y-4 mb-8">
         {members.map((m) => (
-          <div key={m.uid} className="flex items-center gap-4 p-2 rounded-2xl hover:bg-brand-light/50 transition-colors">
-            <img src={m.photoURL} className="w-12 h-12 rounded-full border-2 border-brand/20 shadow-sm" alt={m.displayName} />
+          <div key={m.uid} className="flex items-center gap-4 p-2 rounded-2xl hover:bg-brand-light/50 dark:hover:bg-brand/10 transition-colors">
+            <img src={m.photoURL} className="w-12 h-12 rounded-full border-2 border-brand/20 dark:border-brand/30 shadow-sm" alt={m.displayName} />
             <div>
-              <p className="font-bold text-brand">{m.displayName}</p>
-              <p className="text-xs text-brand/60 font-medium capitalize">{m.role}</p>
+              <p className="font-bold text-brand dark:text-brand-light">{m.displayName}</p>
+              <p className="text-xs text-brand/60 dark:text-brand-light/60 font-medium capitalize">{m.role}</p>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="pt-6 border-t border-brand/10">
-        <p className="text-xs font-bold uppercase tracking-wider text-brand/60 mb-2">Invite Code</p>
-        <div className="flex items-center gap-2 p-3 bg-brand-light rounded-xl">
-          <code className="text-xs flex-1 truncate">{family?.id}</code>
-          <button onClick={copyId} className="p-1.5 hover:bg-white rounded-lg transition-colors">
-            {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-brand" />}
+      <div className="pt-6 border-t border-brand/10 dark:border-brand/20">
+        <p className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 mb-2">Invite Code</p>
+        <div className="flex items-center gap-2 p-3 bg-brand-light dark:bg-brand/10 rounded-xl">
+          <code className="text-xs flex-1 truncate dark:text-brand-light">{family?.id}</code>
+          <button onClick={copyId} className="p-1.5 hover:bg-white dark:hover:bg-brand/20 rounded-lg transition-colors">
+            {copied ? <Check className="w-4 h-4 text-green-600 dark:text-green-400" /> : <Copy className="w-4 h-4 text-brand dark:text-brand-light" />}
           </button>
         </div>
-        <p className="text-[10px] text-brand/40 mt-2 italic">Share this code with family members to join.</p>
+        <p className="text-[10px] text-brand/40 dark:text-brand-light/30 mt-2 italic">Share this code with family members to join.</p>
       </div>
     </div>
   );
@@ -1450,7 +1497,7 @@ function StatsSection({ scholarships }: { scholarships: Scholarship[] }) {
   };
 
   return (
-    <div className="bg-brand rounded-[32px] p-8 text-white shadow-xl shadow-brand/20">
+    <div className="bg-brand dark:bg-brand/20 rounded-[32px] p-8 text-white dark:text-brand-light shadow-xl shadow-brand/20 dark:shadow-none border border-transparent dark:border-brand/20">
       <h3 className="text-xl font-serif font-bold mb-6">Family Progress</h3>
       
       <div className="space-y-6">
@@ -1460,11 +1507,11 @@ function StatsSection({ scholarships }: { scholarships: Scholarship[] }) {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white/10 p-4 rounded-2xl">
+          <div className="bg-white/10 dark:bg-brand/10 p-4 rounded-2xl">
             <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1">Scholarships</p>
             <p className="text-2xl font-serif font-bold">{stats.total}</p>
           </div>
-          <div className="bg-white/10 p-4 rounded-2xl">
+          <div className="bg-white/10 dark:bg-brand/10 p-4 rounded-2xl">
             <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1">Upcoming</p>
             <p className="text-2xl font-serif font-bold">{stats.upcoming}</p>
           </div>
@@ -1474,7 +1521,31 @@ function StatsSection({ scholarships }: { scholarships: Scholarship[] }) {
   );
 }
 
-function SettingsModal({ onClose, onLogout, familyId, userId, family, profile, scholarships, showToast, setConfirmModal }: { onClose: () => void, onLogout: () => void, familyId: string, userId: string, family: Family | null, profile: UserProfile | null, scholarships: Scholarship[], showToast: (m: string, t?: 'success' | 'error') => void, setConfirmModal: (v: any) => void }) {
+function SettingsModal({ 
+  onClose, 
+  onLogout, 
+  familyId, 
+  userId, 
+  family, 
+  profile, 
+  scholarships, 
+  showToast, 
+  setConfirmModal,
+  darkMode,
+  onToggleDarkMode
+}: { 
+  onClose: () => void, 
+  onLogout: () => void, 
+  familyId: string, 
+  userId: string, 
+  family: Family | null, 
+  profile: UserProfile | null, 
+  scholarships: Scholarship[], 
+  showToast: (m: string, t?: 'success' | 'error') => void, 
+  setConfirmModal: (v: any) => void,
+  darkMode: boolean,
+  onToggleDarkMode: () => void
+}) {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const populateDemoData = async () => {
@@ -1599,30 +1670,57 @@ function SettingsModal({ onClose, onLogout, familyId, userId, family, profile, s
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a1a1a]/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a1a1a]/40 backdrop-blur-sm" onClick={onClose}>
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-[32px] w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-brand-dark-surface rounded-[32px] w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
       >
-        <div className="p-8 border-b border-brand/10 flex items-center justify-between shrink-0 bg-brand-light/50">
-          <h2 className="text-2xl font-serif text-brand">Settings & Family</h2>
-          <button onClick={onClose} className="p-2 hover:bg-brand-light rounded-full text-brand"><Plus className="w-6 h-6 rotate-45" /></button>
+        <div className="p-8 border-b border-brand/10 dark:border-brand/20 flex items-center justify-between shrink-0 bg-brand-light/50 dark:bg-brand/20">
+          <h2 className="text-2xl font-serif text-brand dark:text-brand-light">Settings & Family</h2>
+          <button onClick={onClose} className="p-2 hover:bg-brand-light dark:hover:bg-brand/20 rounded-full text-brand dark:text-brand-light"><Plus className="w-6 h-6 rotate-45" /></button>
         </div>
         
-        <div className="p-8 space-y-8 overflow-y-auto">
+        <div className="p-8 space-y-8 overflow-y-auto bg-white dark:bg-brand-dark-bg">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
-              <h3 className="text-lg font-serif font-bold text-brand">Family Members</h3>
+              <h3 className="text-lg font-serif font-bold text-brand dark:text-brand-light">Family Members</h3>
               <FamilySection family={family} profile={profile} />
               
-              <h3 className="text-lg font-serif font-bold text-brand">Progress Stats</h3>
+              <h3 className="text-lg font-serif font-bold text-brand dark:text-brand-light">Progress Stats</h3>
               <StatsSection scholarships={scholarships} />
+
+              <h3 className="text-lg font-serif font-bold text-brand dark:text-brand-light">Preferences</h3>
+              <div className="bg-brand-light dark:bg-brand/5 p-6 rounded-3xl border border-brand/10 dark:border-brand/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white dark:bg-brand/10 rounded-xl shadow-sm">
+                      {darkMode ? <Moon className="w-5 h-5 text-brand" /> : <Sun className="w-5 h-5 text-brand" />}
+                    </div>
+                    <div>
+                      <p className="font-bold text-brand dark:text-brand-light">Dark Mode</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={onToggleDarkMode}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-colors relative",
+                      darkMode ? "bg-brand" : "bg-brand/20"
+                    )}
+                  >
+                    <motion.div 
+                      animate={{ x: darkMode ? 26 : 2 }}
+                      className="w-5 h-5 bg-white rounded-full absolute top-0.5"
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-6">
-              <h3 className="text-lg font-serif font-bold text-brand">Demo Tools</h3>
+              <h3 className="text-lg font-serif font-bold text-brand dark:text-brand-light">Demo Tools</h3>
               <div className="space-y-4">
                 <p className="text-sm text-brand/60 italic">
                   Use these tools to quickly test the application features with sample data.
@@ -1686,12 +1784,28 @@ function SettingsModal({ onClose, onLogout, familyId, userId, family, profile, s
   );
 }
 
-function BoardColumn({ id, title, scholarships, onEdit, familyMembers }: { id: string, title: string, scholarships: Scholarship[], onEdit: (s: Scholarship) => void, familyMembers: UserProfile[] }) {
+function BoardColumn({ id, title, scholarships, onEdit, familyMembers, isNotApplicable }: { id: string, title: string, scholarships: Scholarship[], onEdit: (s: Scholarship) => void, familyMembers: UserProfile[], isNotApplicable?: boolean }) {
   return (
-    <div className="flex flex-col gap-4 bg-brand-light/50 rounded-[32px] p-4 border border-brand/5">
-      <div className="flex items-center justify-between px-2">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-brand/60">{title}</h3>
-        <span className="text-[10px] font-bold bg-brand/10 text-brand/60 px-2 py-0.5 rounded-full">{scholarships.length}</span>
+    <div className={cn(
+      "flex flex-col gap-4 rounded-[32px] p-4 border transition-all",
+      isNotApplicable 
+        ? "bg-red-50/50 dark:bg-red-950/10 border-red-100 dark:border-red-900/30" 
+        : "bg-brand-light/50 dark:bg-brand/5 border-brand/5 dark:border-brand/10"
+    )}>
+      <div className={cn(
+        "flex items-center justify-between px-3 py-1.5 rounded-full",
+        isNotApplicable ? "bg-red-100/50 dark:bg-red-900/20" : ""
+      )}>
+        <h3 className={cn(
+          "text-xs font-bold uppercase tracking-wider",
+          isNotApplicable ? "text-red-600 dark:text-red-400" : "text-brand/60 dark:text-brand-light/60"
+        )}>{title}</h3>
+        <span className={cn(
+          "text-[10px] font-bold px-2 py-0.5 rounded-full",
+          isNotApplicable 
+            ? "bg-red-200/50 dark:bg-red-800/30 text-red-700 dark:text-red-300" 
+            : "bg-brand/10 dark:bg-brand/20 text-brand/60 dark:text-brand-light/60"
+        )}>{scholarships.length}</span>
       </div>
 
       <Droppable droppableId={id}>
@@ -1701,7 +1815,7 @@ function BoardColumn({ id, title, scholarships, onEdit, familyMembers }: { id: s
             ref={provided.innerRef}
             className={cn(
               "flex-1 space-y-3 min-h-[100px] transition-colors rounded-2xl p-1",
-              snapshot.isDraggingOver ? "bg-brand/5" : ""
+              snapshot.isDraggingOver ? "bg-brand/5 dark:bg-brand/10" : ""
             )}
           >
             {scholarships.map((s, index) => {
@@ -1717,24 +1831,24 @@ function BoardColumn({ id, title, scholarships, onEdit, familyMembers }: { id: s
                       {...provided.dragHandleProps}
                       onClick={() => onEdit(s)}
                       className={cn(
-                        "bg-white p-4 rounded-2xl border border-brand/10 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing",
+                        "bg-white dark:bg-brand-dark-surface p-4 rounded-2xl border border-brand/10 dark:border-brand/20 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing",
                         snapshot.isDragging ? "shadow-xl rotate-2" : ""
                       )}
                     >
-                      <p className="font-serif font-bold text-[#1a1a1a] mb-1 line-clamp-2 group-hover:text-brand transition-colors">{s.title}</p>
+                      <p className="font-serif font-bold text-[#1a1a1a] dark:text-brand-light mb-1 line-clamp-2 group-hover:text-brand transition-colors">{s.title}</p>
                       <div className="flex items-center justify-between gap-2 mb-2">
                         {s.academicYear && (
-                          <span className="text-[10px] font-bold text-brand/40">{s.academicYear}</span>
+                          <span className="text-[10px] font-bold text-brand/40 dark:text-brand-light/40">{s.academicYear}</span>
                         )}
                       </div>
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-1 text-[10px] text-brand/40">
+                        <div className="flex items-center gap-1 text-[10px] text-brand/40 dark:text-brand-light/40">
                           <Clock className="w-3 h-3" />
                           {s.deadline ? format(s.deadline.toDate(), 'MMM d') : 'No date'}
                         </div>
                         <div className="flex items-center gap-2">
                           {s.notes && (
-                            <div className="p-1 bg-brand/5 rounded text-brand/40" title="Has notes">
+                            <div className="p-1 bg-brand/5 dark:bg-brand/10 rounded text-brand/40 dark:text-brand-light/40" title="Has notes">
                               <FileText className="w-3 h-3" />
                             </div>
                           )}
@@ -1745,11 +1859,11 @@ function BoardColumn({ id, title, scholarships, onEdit, familyMembers }: { id: s
                       </div>
                       
                       {applicableStudents.length > 0 && (
-                        <div className="flex -space-x-1.5 pt-1 border-t border-brand/5">
+                        <div className="flex -space-x-1.5 pt-1 border-t border-brand/5 dark:border-brand/10">
                           {applicableStudents.map(student => (
                             <div 
                               key={student.uid}
-                              className="w-5 h-5 rounded-full border-2 border-white bg-brand-light flex items-center justify-center overflow-hidden"
+                              className="w-5 h-5 rounded-full border-2 border-white dark:border-brand-dark-surface bg-brand-light dark:bg-brand/10 flex items-center justify-center overflow-hidden"
                               title={student.displayName}
                             >
                               <img 
