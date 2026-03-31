@@ -37,10 +37,10 @@
     @apply text-brand underline decoration-brand/30 hover:decoration-brand transition-all;
   }
   .markdown-body ul {
-    @apply list-disc list-inside mb-2;
+    @apply list-disc list-outside ml-6 mb-2;
   }
   .markdown-body ol {
-    @apply list-decimal list-inside mb-2;
+    @apply list-decimal list-outside ml-6 mb-2;
   }
   .markdown-body blockquote {
     @apply border-l-4 border-brand/20 pl-4 italic text-brand/60 my-2;
@@ -55,8 +55,8 @@
   @apply text-brand/30 content-[attr(data-placeholder)] float-left h-0 pointer-events-none;
 }
 .ProseMirror ul {
-  @apply list-disc list-inside;
+  @apply list-disc list-outside ml-6;
 }
 .ProseMirror ol {
-  @apply list-decimal list-inside;
+  @apply list-decimal list-outside ml-6;
 }

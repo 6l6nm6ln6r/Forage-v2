@@ -224,6 +224,40 @@ export default function App() {
   const [showNotApplicable, setShowNotApplicable] = useState(true);
 
   useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state?.page === 'scholarship-form') {
+        setActivePage('scholarship-form');
+      } else {
+        setActivePage('dashboard');
+        setEditingScholarship(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    if (!window.history.state) {
+      window.history.replaceState({ page: 'dashboard' }, '');
+    }
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const openScholarshipForm = (scholarship: Scholarship | null = null) => {
+    setEditingScholarship(scholarship);
+    setActivePage('scholarship-form');
+    window.history.pushState({ page: 'scholarship-form' }, '');
+  };
+
+  const closeScholarshipForm = () => {
+    if (window.history.state?.page === 'scholarship-form') {
+      window.history.back();
+    } else {
+      setActivePage('dashboard');
+      setEditingScholarship(null);
+    }
+  };
+
+  useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -764,10 +798,7 @@ export default function App() {
                 </div>
 
                 <button 
-                  onClick={() => {
-                    setEditingScholarship(null);
-                    setActivePage('scholarship-form');
-                  }}
+                  onClick={() => openScholarshipForm(null)}
                   className="bg-brand text-white px-4 py-2 rounded-full flex items-center justify-center gap-2 hover:bg-brand-dark transition-all shadow-lg shadow-brand/20 font-bold flex-1 md:flex-none"
                 >
                   <Plus className="w-5 h-5" />
@@ -846,10 +877,7 @@ export default function App() {
                           <ScholarshipRow 
                             key={s.id} 
                             scholarship={s} 
-                            onEdit={() => {
-                              setEditingScholarship(s);
-                              setActivePage('scholarship-form');
-                            }}
+                            onEdit={() => openScholarshipForm(s)}
                             setConfirmModal={setConfirmModal}
                             showToast={showToast}
                             familyMembers={familyMembers}
@@ -872,10 +900,7 @@ export default function App() {
                       id="not_applicable" 
                       title="Not Applicable" 
                       scholarships={filteredScholarships.filter(s => s.status === 'not_applicable')} 
-                      onEdit={(s) => { 
-                        setEditingScholarship(s); 
-                        setActivePage('scholarship-form'); 
-                      }}
+                      onEdit={(s) => openScholarshipForm(s)}
                       familyMembers={familyMembers}
                       inviteCodes={inviteCodes}
                       isNotApplicable
@@ -885,10 +910,7 @@ export default function App() {
                     id="intake" 
                     title="Intake" 
                     scholarships={filteredScholarships.filter(s => s.status === 'intake')} 
-                    onEdit={(s) => { 
-                      setEditingScholarship(s); 
-                      setActivePage('scholarship-form'); 
-                    }}
+                    onEdit={(s) => openScholarshipForm(s)}
                     familyMembers={familyMembers}
                     inviteCodes={inviteCodes}
                   />
@@ -896,10 +918,7 @@ export default function App() {
                     id="need_to_apply" 
                     title="Need to Apply" 
                     scholarships={filteredScholarships.filter(s => s.status === 'need_to_apply')} 
-                    onEdit={(s) => { 
-                      setEditingScholarship(s); 
-                      setActivePage('scholarship-form'); 
-                    }}
+                    onEdit={(s) => openScholarshipForm(s)}
                     familyMembers={familyMembers}
                     inviteCodes={inviteCodes}
                   />
@@ -907,10 +926,7 @@ export default function App() {
                     id="in_progress" 
                     title="In Progress" 
                     scholarships={filteredScholarships.filter(s => s.status === 'in_progress')} 
-                    onEdit={(s) => { 
-                      setEditingScholarship(s); 
-                      setActivePage('scholarship-form'); 
-                    }}
+                    onEdit={(s) => openScholarshipForm(s)}
                     familyMembers={familyMembers}
                     inviteCodes={inviteCodes}
                   />
@@ -918,10 +934,7 @@ export default function App() {
                     id="applied" 
                     title="Applied" 
                     scholarships={filteredScholarships.filter(s => s.status === 'applied')} 
-                    onEdit={(s) => { 
-                      setEditingScholarship(s); 
-                      setActivePage('scholarship-form'); 
-                    }}
+                    onEdit={(s) => openScholarshipForm(s)}
                     familyMembers={familyMembers}
                     inviteCodes={inviteCodes}
                   />
@@ -931,10 +944,7 @@ export default function App() {
           </div>
         ) : (
           <ScholarshipForm 
-            onClose={() => {
-              setActivePage('dashboard');
-              setEditingScholarship(null);
-            }}
+            onClose={closeScholarshipForm}
             familyId={profile.familyId!}
             userId={user.uid}
             editing={editingScholarship}
