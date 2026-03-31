@@ -34,6 +34,16 @@ service cloud.firestore {
     //   - addedBy: string (required)
     //   - createdAt: timestamp (required)
     //
+    // Collection: inviteCodes
+    // Fields:
+    //   - code: string (required)
+    //   - name: string (required)
+    //   - role: string (required, enum: ["student", "guardian"])
+    //   - familyId: string (required)
+    //   - createdBy: string (required)
+    //   - createdAt: timestamp (required)
+    //   - used: bool (required)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -88,6 +98,17 @@ service cloud.firestore {
              (!('applicableStudents' in data) || data.applicableStudents is list);
     }
 
+    function isValidInviteCode(data) {
+      return data.keys().hasAll(['code', 'name', 'role', 'familyId', 'createdBy', 'createdAt', 'used']) &&
+             data.code is string && data.code.size() > 0 &&
+             data.name is string && data.name.size() > 0 &&
+             data.role in ['student', 'guardian'] &&
+             data.familyId is string &&
+             data.createdBy == request.auth.uid &&
+             data.createdAt is timestamp &&
+             data.used is bool;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -115,6 +136,17 @@ service cloud.firestore {
                       request.resource.data.addedBy == resource.data.addedBy &&
                       request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if isAuthenticated() && isInFamily(resource.data.familyId);
+    }
+
+    match /inviteCodes/{codeId} {
+      allow read: if true; // Codes need to be readable to be checked
+      allow create: if isAuthenticated() && 
+                      getUserData().role == 'guardian' &&
+                      isInFamily(request.resource.data.familyId) &&
+                      isValidInviteCode(request.resource.data);
+      allow update: if isAuthenticated() && 
+                      (isOwner(resource.data.createdBy) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used']));
+      allow delete: if isAuthenticated() && isOwner(resource.data.createdBy);
     }
   }
 }

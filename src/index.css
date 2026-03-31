@@ -15,8 +15,8 @@
 @variant dark (&:where(.dark, .dark *));
 
 @layer base {
-  body {
-    @apply transition-colors duration-300;
+  html, body {
+    @apply transition-colors duration-300 bg-brand-light dark:bg-brand-dark-bg;
   }
   .markdown-body {
     @apply leading-relaxed dark:text-brand-light/80;

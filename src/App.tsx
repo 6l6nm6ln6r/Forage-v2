@@ -169,6 +169,35 @@ interface Scholarship {
   academicYear?: string;
 }
 
+interface InviteCode {
+  id: string;
+  code: string;
+  name: string;
+  role: 'student' | 'guardian';
+  familyId: string;
+  createdBy: string;
+  createdAt: Timestamp;
+  used: boolean;
+}
+
+const getAvatarColor = (name: string) => {
+  const colors = [
+    'bg-red-100 text-red-600 border-red-200',
+    'bg-blue-100 text-blue-600 border-blue-200',
+    'bg-green-100 text-green-600 border-green-200',
+    'bg-amber-100 text-amber-600 border-amber-200',
+    'bg-purple-100 text-purple-600 border-purple-200',
+    'bg-pink-100 text-pink-600 border-pink-200',
+    'bg-indigo-100 text-indigo-600 border-indigo-200',
+    'bg-teal-100 text-teal-600 border-teal-200',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
 // --- Components ---
 
 export default function App() {
@@ -176,6 +205,7 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [family, setFamily] = useState<Family | null>(null);
   const [familyMembers, setFamilyMembers] = useState<UserProfile[]>([]);
+  const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -338,10 +368,18 @@ export default function App() {
         handleFirestoreError(error, OperationType.GET, 'users');
       });
 
+      const qInvites = query(collection(db, 'inviteCodes'), where('familyId', '==', profile.familyId));
+      const unsubInvites = onSnapshot(qInvites, (snapshot) => {
+        setInviteCodes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InviteCode)));
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, 'inviteCodes');
+      });
+
       return () => {
         unsubFamily();
         unsubScholarships();
         unsubMembers();
+        unsubInvites();
       };
     }
   }, [profile?.familyId]);
@@ -388,22 +426,60 @@ export default function App() {
     }
   };
 
-  const joinFamily = async (familyId: string) => {
+  const joinFamily = async (inviteCode: string) => {
     if (!user) return;
     try {
-      const familyDoc = await getDoc(doc(db, 'families', familyId));
-      if (familyDoc.exists()) {
+      const q = query(collection(db, 'inviteCodes'), where('code', '==', inviteCode.toUpperCase()), where('used', '==', false));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const inviteDoc = querySnapshot.docs[0];
+        const inviteData = inviteDoc.data() as InviteCode;
+        
+        // Update all scholarships that were assigned to this invite code
+        const scholarshipQuery = query(collection(db, 'scholarships'), where('familyId', '==', inviteData.familyId));
+        const scholarshipDocs = await getDocs(scholarshipQuery);
+        
+        for (const sDoc of scholarshipDocs.docs) {
+          const sData = sDoc.data() as Scholarship;
+          if (sData.applicableStudents?.includes(inviteDoc.id)) {
+            const newStudents = sData.applicableStudents.map(id => id === inviteDoc.id ? user.uid : id);
+            await updateDoc(sDoc.ref, { applicableStudents: newStudents });
+          }
+        }
+
         await updateDoc(doc(db, 'users', user.uid), {
-          familyId: familyId,
-          role: 'student'
+          familyId: inviteData.familyId,
+          role: inviteData.role,
+          displayName: inviteData.name // Optionally update display name to the one assigned in the invite
         });
-        setProfile(prev => prev ? { ...prev, familyId: familyId, role: 'student' } : null);
+        
+        await updateDoc(inviteDoc.ref, { used: true });
+        
+        setProfile(prev => prev ? { 
+          ...prev, 
+          familyId: inviteData.familyId, 
+          role: inviteData.role,
+          displayName: inviteData.name
+        } : null);
+        
         showToast("Joined family!");
       } else {
-        showToast("Family not found!", "error");
+        // Fallback to direct family ID join for backward compatibility or if intended
+        const familyDoc = await getDoc(doc(db, 'families', inviteCode));
+        if (familyDoc.exists()) {
+          await updateDoc(doc(db, 'users', user.uid), {
+            familyId: inviteCode,
+            role: 'student'
+          });
+          setProfile(prev => prev ? { ...prev, familyId: inviteCode, role: 'student' } : null);
+          showToast("Joined family!");
+        } else {
+          showToast("Invalid invite code or family ID!", "error");
+        }
       }
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'users');
+      handleFirestoreError(error, OperationType.WRITE, 'users/inviteCodes');
     }
   };
 
@@ -477,7 +553,12 @@ export default function App() {
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-center justify-between md:justify-start gap-6">
-                <h2 className="text-3xl font-serif text-[#1a1a1a] dark:text-brand-light">Scholarships</h2>
+                <div className="flex items-baseline gap-3">
+                  <h2 className="text-3xl font-serif text-[#1a1a1a] dark:text-brand-light">Scholarships</h2>
+                  <span className="text-lg font-sans font-bold text-brand/40 dark:text-brand-light/40">
+                    {filteredScholarships.length}
+                  </span>
+                </div>
                 <div className="flex bg-brand-light dark:bg-brand/10 p-1 rounded-xl border border-brand/10 dark:border-brand/20">
                   <button 
                     onClick={() => setViewMode('table')}
@@ -619,6 +700,29 @@ export default function App() {
                                   </span>
                                 </button>
                               ))}
+                              {inviteCodes.filter(ic => ic.role === 'student' && !ic.used).map(invite => (
+                                <button 
+                                  key={invite.id}
+                                  onClick={() => {
+                                    setSelectedStudents(prev => 
+                                      prev.includes(invite.id) ? prev.filter(id => id !== invite.id) : [...prev, invite.id]
+                                    );
+                                  }}
+                                  className="flex items-center gap-2 w-full text-left group"
+                                >
+                                  {selectedStudents.includes(invite.id) ? (
+                                    <CheckSquare className="w-4 h-4 text-brand dark:text-brand-light" />
+                                  ) : (
+                                    <Square className="w-4 h-4 text-brand/20 dark:text-brand-light/20 group-hover:text-brand/40 dark:group-hover:text-brand-light/40" />
+                                  )}
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={cn("text-sm", selectedStudents.includes(invite.id) ? "text-brand dark:text-brand-light font-bold" : "text-brand/60 dark:text-brand-light/60")}>
+                                      {invite.name}
+                                    </span>
+                                    <span className="text-[9px] font-bold uppercase tracking-tighter opacity-40">Invited</span>
+                                  </div>
+                                </button>
+                              ))}
                             </div>
                           </div>
 
@@ -732,6 +836,9 @@ export default function App() {
                               </div>
                             </div>
                           </th>
+                          <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40">
+                            Students
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -746,6 +853,7 @@ export default function App() {
                             setConfirmModal={setConfirmModal}
                             showToast={showToast}
                             familyMembers={familyMembers}
+                            inviteCodes={inviteCodes}
                           />
                         ))}
                       </tbody>
@@ -769,6 +877,7 @@ export default function App() {
                         setActivePage('scholarship-form'); 
                       }}
                       familyMembers={familyMembers}
+                      inviteCodes={inviteCodes}
                       isNotApplicable
                     />
                   )}
@@ -781,6 +890,7 @@ export default function App() {
                       setActivePage('scholarship-form'); 
                     }}
                     familyMembers={familyMembers}
+                    inviteCodes={inviteCodes}
                   />
                   <BoardColumn 
                     id="need_to_apply" 
@@ -791,6 +901,7 @@ export default function App() {
                       setActivePage('scholarship-form'); 
                     }}
                     familyMembers={familyMembers}
+                    inviteCodes={inviteCodes}
                   />
                   <BoardColumn 
                     id="in_progress" 
@@ -801,6 +912,7 @@ export default function App() {
                       setActivePage('scholarship-form'); 
                     }}
                     familyMembers={familyMembers}
+                    inviteCodes={inviteCodes}
                   />
                   <BoardColumn 
                     id="applied" 
@@ -811,6 +923,7 @@ export default function App() {
                       setActivePage('scholarship-form'); 
                     }}
                     familyMembers={familyMembers}
+                    inviteCodes={inviteCodes}
                   />
                 </div>
               </DragDropContext>
@@ -828,6 +941,7 @@ export default function App() {
             showToast={showToast}
             setConfirmModal={setConfirmModal}
             familyMembers={familyMembers}
+            inviteCodes={inviteCodes}
           />
         )}
       </main>
@@ -1021,12 +1135,12 @@ function FamilySetup({ onCreate, onJoin }: { onCreate: (n: string) => void, onJo
               className="space-y-6"
             >
               <div>
-                <label className="block text-sm font-medium mb-2 text-brand dark:text-brand-light">Family ID</label>
+                <label className="block text-sm font-medium mb-2 text-brand dark:text-brand-light">Invite Code or Family ID</label>
                 <input 
                   type="text" 
                   value={joinId}
                   onChange={(e) => setJoinId(e.target.value)}
-                  placeholder="Paste family code here"
+                  placeholder="Enter code here"
                   className="w-full p-4 rounded-xl bg-brand-light dark:bg-brand/5 border-none focus:ring-2 focus:ring-brand dark:text-brand-light"
                 />
               </div>
@@ -1048,7 +1162,7 @@ function FamilySetup({ onCreate, onJoin }: { onCreate: (n: string) => void, onJo
   );
 }
 
-function ScholarshipRow({ scholarship, onEdit, setConfirmModal, showToast, familyMembers }: { scholarship: Scholarship, onEdit: () => void, setConfirmModal: (v: any) => void, showToast: (m: string, t?: 'success' | 'error') => void, familyMembers: UserProfile[], key?: React.Key }) {
+function ScholarshipRow({ scholarship, onEdit, setConfirmModal, showToast, familyMembers, inviteCodes }: { scholarship: Scholarship, onEdit: () => void, setConfirmModal: (v: any) => void, showToast: (m: string, t?: 'success' | 'error') => void, familyMembers: UserProfile[], inviteCodes: InviteCode[], key?: React.Key }) {
   const statusConfig = {
     intake: { icon: Info, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', label: 'Intake' },
     not_applicable: { icon: HelpCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', label: 'Not Applicable' },
@@ -1059,6 +1173,7 @@ function ScholarshipRow({ scholarship, onEdit, setConfirmModal, showToast, famil
 
   const config = statusConfig[scholarship.status] || statusConfig.intake;
   const applicableStudents = familyMembers.filter(m => scholarship.applicableStudents?.includes(m.uid));
+  const invitedStudents = inviteCodes.filter(ic => scholarship.applicableStudents?.includes(ic.id));
 
   return (
     <tr 
@@ -1100,6 +1215,39 @@ function ScholarshipRow({ scholarship, onEdit, setConfirmModal, showToast, famil
           <config.icon className="w-3 h-3" />
           {config.label}
         </span>
+      </td>
+      <td className="px-6 py-4">
+        <div className="flex -space-x-2">
+          {applicableStudents.map(student => (
+            <div 
+              key={student.uid}
+              className="w-8 h-8 rounded-full border-2 border-white dark:border-brand-dark-surface bg-brand-light dark:bg-brand/10 flex items-center justify-center overflow-hidden shadow-sm"
+              title={student.displayName}
+            >
+              <img 
+                src={student.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.displayName)}&background=random`} 
+                alt={student.displayName}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          ))}
+          {invitedStudents.map(invite => (
+            <div 
+              key={invite.id}
+              className={cn(
+                "w-8 h-8 rounded-full border-2 border-dashed flex items-center justify-center shadow-sm text-xs font-bold",
+                getAvatarColor(invite.name)
+              )}
+              title={`${invite.name} (Invited)`}
+            >
+              {invite.name.charAt(0).toUpperCase()}
+            </div>
+          ))}
+          {applicableStudents.length === 0 && invitedStudents.length === 0 && (
+            <span className="text-xs text-brand/30 italic">None</span>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -1196,7 +1344,7 @@ function RichTextEditor({ value, onChange, placeholder }: { value: string, onCha
   );
 }
 
-function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setConfirmModal, familyMembers }: { onClose: () => void, familyId: string, userId: string, editing?: Scholarship | null, showToast: (m: string, t?: 'success' | 'error') => void, setConfirmModal: (v: any) => void, familyMembers: UserProfile[] }) {
+function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setConfirmModal, familyMembers, inviteCodes }: { onClose: () => void, familyId: string, userId: string, editing?: Scholarship | null, showToast: (m: string, t?: 'success' | 'error') => void, setConfirmModal: (v: any) => void, familyMembers: UserProfile[], inviteCodes: InviteCode[] }) {
   const [formData, setFormData] = useState({
     title: editing?.title || '',
     amount: editing?.amount?.toString() || '',
@@ -1209,6 +1357,7 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
   });
 
   const students = familyMembers.filter(m => m.role === 'student');
+  const invitedStudents = inviteCodes.filter(ic => ic.role === 'student' && !ic.used);
 
   const toggleStudent = (studentId: string) => {
     setFormData(prev => ({
@@ -1354,28 +1503,54 @@ function ScholarshipForm({ onClose, familyId, userId, editing, showToast, setCon
             <div className="space-y-4 md:col-span-2">
               <label className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 ml-1">Applicable Students</label>
               <div className="flex flex-wrap gap-3">
-                {students.length > 0 ? (
-                  students.map(student => (
-                    <button
-                      key={student.uid}
-                      type="button"
-                      onClick={() => toggleStudent(student.uid)}
-                      className={cn(
-                        "flex items-center gap-3 p-3 pr-5 rounded-2xl border-2 transition-all",
-                        formData.applicableStudents.includes(student.uid)
-                          ? "bg-brand text-white border-brand shadow-lg shadow-brand/20"
-                          : "bg-brand-light dark:bg-brand/5 border-transparent dark:border-brand/20 text-brand/60 dark:text-brand-light/60 hover:border-brand/20"
-                      )}
-                    >
-                      <img 
-                        src={student.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.displayName)}&background=random`} 
-                        alt={student.displayName}
-                        className="w-8 h-8 rounded-full border-2 border-white/20"
-                        referrerPolicy="no-referrer"
-                      />
-                      <span className="font-bold">{student.displayName}</span>
-                    </button>
-                  ))
+                {students.length > 0 || invitedStudents.length > 0 ? (
+                  <>
+                    {students.map(student => (
+                      <button
+                        key={student.uid}
+                        type="button"
+                        onClick={() => toggleStudent(student.uid)}
+                        className={cn(
+                          "flex items-center gap-3 p-3 pr-5 rounded-2xl border-2 transition-all",
+                          formData.applicableStudents.includes(student.uid)
+                            ? "bg-brand text-white border-brand shadow-lg shadow-brand/20"
+                            : "bg-brand-light dark:bg-brand/5 border-transparent dark:border-brand/20 text-brand/60 dark:text-brand-light/60 hover:border-brand/20"
+                        )}
+                      >
+                        <img 
+                          src={student.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.displayName)}&background=random`} 
+                          alt={student.displayName}
+                          className="w-8 h-8 rounded-full border-2 border-white/20"
+                          referrerPolicy="no-referrer"
+                        />
+                        <span className="font-bold">{student.displayName}</span>
+                      </button>
+                    ))}
+                    {invitedStudents.map(invite => (
+                      <button
+                        key={invite.id}
+                        type="button"
+                        onClick={() => toggleStudent(invite.id)}
+                        className={cn(
+                          "flex items-center gap-3 p-3 pr-5 rounded-2xl border-2 border-dashed transition-all",
+                          formData.applicableStudents.includes(invite.id)
+                            ? "bg-brand text-white border-brand shadow-lg shadow-brand/20"
+                            : "bg-brand-light dark:bg-brand/5 border-brand/10 dark:border-brand/20 text-brand/60 dark:text-brand-light/60 hover:border-brand/30"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center border border-brand/20 text-xs font-bold",
+                          getAvatarColor(invite.name)
+                        )}>
+                          {invite.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="text-left">
+                          <span className="font-bold block leading-none">{invite.name}</span>
+                          <span className="text-[10px] opacity-60 uppercase font-bold">Invited</span>
+                        </div>
+                      </button>
+                    ))}
+                  </>
                 ) : (
                   <p className="text-sm text-brand/40 dark:text-brand-light/40 italic p-4 bg-brand-light dark:bg-brand/5 rounded-2xl w-full">
                     No students found in your family. Add them in Settings.
@@ -1478,14 +1653,14 @@ function FamilySection({ family, profile }: { family: Family | null, profile: Us
       </div>
 
       <div className="pt-6 border-t border-brand/10 dark:border-brand/20">
-        <p className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 mb-2">Invite Code</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40 mb-2">Family ID (Direct Join)</p>
         <div className="flex items-center gap-2 p-3 bg-brand-light dark:bg-brand/10 rounded-xl">
           <code className="text-xs flex-1 truncate dark:text-brand-light">{family?.id}</code>
           <button onClick={copyId} className="p-1.5 hover:bg-white dark:hover:bg-brand/20 rounded-lg transition-colors">
             {copied ? <Check className="w-4 h-4 text-green-600 dark:text-green-400" /> : <Copy className="w-4 h-4 text-brand dark:text-brand-light" />}
           </button>
         </div>
-        <p className="text-[10px] text-brand/40 dark:text-brand-light/30 mt-2 italic">Share this code with family members to join.</p>
+        <p className="text-[10px] text-brand/40 dark:text-brand-light/30 mt-2 italic">Share this ID for direct joining, or use Invite Codes in Settings for named invites.</p>
       </div>
     </div>
   );
@@ -1520,6 +1695,137 @@ function StatsSection({ scholarships }: { scholarships: Scholarship[] }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function InviteCodesSection({ familyId, showToast }: { familyId: string, showToast: (m: string, t?: 'success' | 'error') => void }) {
+  const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState<'student' | 'guardian'>('student');
+  const [isCreating, setIsCreating] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'inviteCodes'), where('familyId', '==', familyId));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setInviteCodes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InviteCode)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'inviteCodes');
+    });
+    return unsub;
+  }, [familyId]);
+
+  const createCode = async () => {
+    if (inviteCodes.length >= 10) {
+      showToast("Maximum of 10 invite codes reached.", "error");
+      return;
+    }
+    if (!newName.trim()) {
+      showToast("Please enter a name.", "error");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      await addDoc(collection(db, 'inviteCodes'), {
+        code,
+        name: newName,
+        role: newRole,
+        familyId,
+        createdBy: auth.currentUser?.uid,
+        createdAt: serverTimestamp(),
+        used: false
+      });
+      setNewName('');
+      showToast("Invite code created!");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'inviteCodes');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const deleteCode = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'inviteCodes', id));
+      showToast("Invite code deleted.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `inviteCodes/${id}`);
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-brand/5 rounded-[32px] p-8 border border-brand/10 dark:border-brand/20 shadow-sm">
+      <div className="flex items-center gap-3 mb-6">
+        <UserPlus className="w-6 h-6 text-brand dark:text-brand-light" />
+        <h3 className="text-xl font-serif font-bold text-brand dark:text-brand-light">Invite Codes</h3>
+      </div>
+
+      <div className="space-y-4 mb-8">
+        {inviteCodes.map((ic) => (
+          <div key={ic.id} className="flex items-center justify-between p-4 bg-brand-light/30 dark:bg-brand/10 rounded-2xl border border-brand/5">
+            <div>
+              <p className="font-bold text-brand dark:text-brand-light">{ic.name}</p>
+              <p className="text-xs text-brand/60 dark:text-brand-light/60 font-medium capitalize">{ic.role} • {ic.used ? 'Used' : 'Available'}</p>
+              <code className="text-sm font-mono font-bold text-brand dark:text-brand-light mt-1 block">{ic.code}</code>
+            </div>
+            {!ic.used && (
+              <button 
+                onClick={() => deleteCode(ic.id)}
+                className="p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl text-red-500 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        ))}
+        {inviteCodes.length === 0 && (
+          <p className="text-sm text-brand/40 dark:text-brand-light/40 italic text-center py-4">No invite codes created yet.</p>
+        )}
+      </div>
+
+      {inviteCodes.length < 10 && (
+        <div className="space-y-4 pt-6 border-t border-brand/10 dark:border-brand/20">
+          <p className="text-xs font-bold uppercase tracking-wider text-brand/60 dark:text-brand-light/40">Create New Invite</p>
+          <div className="space-y-3">
+            <input 
+              type="text" 
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Name (e.g. Alex)"
+              className="w-full px-4 py-2 bg-white dark:bg-brand/5 border border-brand/10 dark:border-brand/20 rounded-xl text-sm focus:ring-2 focus:ring-brand"
+            />
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setNewRole('student')}
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-xs font-bold transition-all border",
+                  newRole === 'student' ? "bg-brand text-white border-brand" : "bg-white dark:bg-brand/5 text-brand/60 dark:text-brand-light/60 border-brand/10 dark:border-brand/20"
+                )}
+              >
+                Student
+              </button>
+              <button 
+                onClick={() => setNewRole('guardian')}
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-xs font-bold transition-all border",
+                  newRole === 'guardian' ? "bg-brand text-white border-brand" : "bg-white dark:bg-brand/5 text-brand/60 dark:text-brand-light/60 border-brand/10 dark:border-brand/20"
+                )}
+              >
+                Guardian
+              </button>
+            </div>
+            <button 
+              onClick={createCode}
+              disabled={isCreating}
+              className="w-full bg-brand text-white py-2 rounded-xl font-bold hover:bg-brand-dark transition-all disabled:opacity-50"
+            >
+              {isCreating ? 'Creating...' : 'Generate Code'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1692,6 +1998,13 @@ function SettingsModal({
               <h3 className="text-lg font-serif font-bold text-brand dark:text-brand-light">Family Members</h3>
               <FamilySection family={family} profile={profile} />
               
+              {profile?.role === 'guardian' && (
+                <>
+                  <h3 className="text-lg font-serif font-bold text-brand dark:text-brand-light">Invites</h3>
+                  <InviteCodesSection familyId={familyId} showToast={showToast} />
+                </>
+              )}
+              
               <h3 className="text-lg font-serif font-bold text-brand dark:text-brand-light">Progress Stats</h3>
               <StatsSection scholarships={scholarships} />
 
@@ -1787,7 +2100,7 @@ function SettingsModal({
   );
 }
 
-function BoardColumn({ id, title, scholarships, onEdit, familyMembers, isNotApplicable }: { id: string, title: string, scholarships: Scholarship[], onEdit: (s: Scholarship) => void, familyMembers: UserProfile[], isNotApplicable?: boolean }) {
+function BoardColumn({ id, title, scholarships, onEdit, familyMembers, inviteCodes, isNotApplicable }: { id: string, title: string, scholarships: Scholarship[], onEdit: (s: Scholarship) => void, familyMembers: UserProfile[], inviteCodes: InviteCode[], isNotApplicable?: boolean }) {
   return (
     <div className={cn(
       "flex flex-col gap-4 rounded-[32px] p-4 border transition-all",
@@ -1824,6 +2137,7 @@ function BoardColumn({ id, title, scholarships, onEdit, familyMembers, isNotAppl
             {scholarships.map((s, index) => {
               const DraggableComp = Draggable as any;
               const applicableStudents = familyMembers.filter(m => s.applicableStudents?.includes(m.uid));
+              const invitedStudents = inviteCodes.filter(ic => s.applicableStudents?.includes(ic.id));
               
               return (
                 <DraggableComp key={s.id} draggableId={s.id} index={index}>
@@ -1861,7 +2175,7 @@ function BoardColumn({ id, title, scholarships, onEdit, familyMembers, isNotAppl
                         </div>
                       </div>
                       
-                      {applicableStudents.length > 0 && (
+                      {(applicableStudents.length > 0 || invitedStudents.length > 0) && (
                         <div className="flex -space-x-1.5 pt-1 border-t border-brand/5 dark:border-brand/10">
                           {applicableStudents.map(student => (
                             <div 
@@ -1875,6 +2189,18 @@ function BoardColumn({ id, title, scholarships, onEdit, familyMembers, isNotAppl
                                 className="w-full h-full object-cover"
                                 referrerPolicy="no-referrer"
                               />
+                            </div>
+                          ))}
+                          {invitedStudents.map(invite => (
+                            <div 
+                              key={invite.id}
+                              className={cn(
+                                "w-5 h-5 rounded-full border border-dashed flex items-center justify-center text-[8px] font-bold",
+                                getAvatarColor(invite.name)
+                              )}
+                              title={`${invite.name} (Invited)`}
+                            >
+                              {invite.name.charAt(0).toUpperCase()}
                             </div>
                           ))}
                         </div>
