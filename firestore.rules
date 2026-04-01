@@ -121,7 +121,8 @@ service cloud.firestore {
     }
 
     match /families/{familyId} {
-      allow read: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isInFamily(familyId));
+      allow get: if isAuthenticated();
+      allow list: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isInFamily(familyId));
       allow create: if isAuthenticated() && isValidFamily(request.resource.data);
       allow update: if isInFamily(familyId) && isValidFamily(request.resource.data);
     }

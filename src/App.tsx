@@ -200,7 +200,56 @@ const getAvatarColor = (name: string) => {
 
 // --- Components ---
 
-export default function App() {
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, errorInfo: string | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, errorInfo: error instanceof Error ? error.message : String(error) };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let displayError = this.state.errorInfo;
+      try {
+        const parsed = JSON.parse(this.state.errorInfo || '');
+        if (parsed.error) displayError = parsed.error;
+      } catch (e) {
+        // Not JSON
+      }
+
+      return (
+        <div className="min-h-screen bg-brand-light dark:bg-brand-dark-bg flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-brand-dark-surface p-8 rounded-[32px] shadow-2xl border border-brand/10 dark:border-brand/20 max-w-md w-full text-center">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <XCircle className="w-10 h-10 text-red-600 dark:text-red-400" />
+            </div>
+            <h2 className="text-2xl font-serif font-bold text-brand dark:text-brand-light mb-4">Something went wrong</h2>
+            <p className="text-brand/60 dark:text-brand-light/60 mb-8 leading-relaxed">
+              {displayError || "An unexpected error occurred. Please try refreshing the page."}
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-4 bg-brand text-white rounded-xl font-bold hover:bg-brand-dark transition-all shadow-lg shadow-brand/20"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [family, setFamily] = useState<Family | null>(null);
@@ -208,6 +257,7 @@ export default function App() {
   const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'board'>('table');
   const [activePage, setActivePage] = useState<'dashboard' | 'scholarship-form'>('dashboard');
@@ -367,10 +417,12 @@ export default function App() {
           await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
           setProfile(newProfile);
         }
+        setIsAuthReady(true);
       } else {
         setProfile(null);
         setFamily(null);
         setScholarships([]);
+        setIsAuthReady(false);
       }
       setLoading(false);
     });
@@ -378,7 +430,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (profile?.familyId) {
+    if (isAuthReady && profile?.familyId) {
       const unsubFamily = onSnapshot(doc(db, 'families', profile.familyId), (doc) => {
         if (doc.exists()) {
           setFamily({ id: doc.id, ...doc.data() } as Family);
@@ -416,7 +468,7 @@ export default function App() {
         unsubInvites();
       };
     }
-  }, [profile?.familyId]);
+  }, [isAuthReady, profile?.familyId]);
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -470,7 +522,18 @@ export default function App() {
         const inviteDoc = querySnapshot.docs[0];
         const inviteData = inviteDoc.data() as InviteCode;
         
-        // Update all scholarships that were assigned to this invite code
+        // 1. Update user profile first so security rules allow subsequent operations
+        await updateDoc(doc(db, 'users', user.uid), {
+          familyId: inviteData.familyId,
+          role: inviteData.role,
+          displayName: inviteData.name // Optionally update display name to the one assigned in the invite
+        });
+        
+        // 2. Mark invite as used
+        await updateDoc(inviteDoc.ref, { used: true });
+
+        // 3. Update all scholarships that were assigned to this invite code
+        // Now that the user is in the family, they have permission to read/write scholarships
         const scholarshipQuery = query(collection(db, 'scholarships'), where('familyId', '==', inviteData.familyId));
         const scholarshipDocs = await getDocs(scholarshipQuery);
         
@@ -481,15 +544,8 @@ export default function App() {
             await updateDoc(sDoc.ref, { applicableStudents: newStudents });
           }
         }
-
-        await updateDoc(doc(db, 'users', user.uid), {
-          familyId: inviteData.familyId,
-          role: inviteData.role,
-          displayName: inviteData.name // Optionally update display name to the one assigned in the invite
-        });
         
-        await updateDoc(inviteDoc.ref, { used: true });
-        
+        // 4. Update local state
         setProfile(prev => prev ? { 
           ...prev, 
           familyId: inviteData.familyId, 
@@ -2225,5 +2281,13 @@ function BoardColumn({ id, title, scholarships, onEdit, familyMembers, inviteCod
         )}
       </Droppable>
     </div>
+  );
+}
+
+export default function AppWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   );
 }
